@@ -1,7 +1,7 @@
 ﻿import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { ChevronLeft } from 'lucide-react'
-import { createServiceClient } from '@/lib/supabase/server'
+import { createClient } from '@/lib/supabase/server'
 import type { Tables } from '@/types/database'
 import { InsumoForm } from '@/components/insumos/InsumoForm'
 import { atualizarInsumo, excluirInsumo } from '../actions'
@@ -11,7 +11,7 @@ type Insumo = Tables<'insumos'>
 
 export default async function EditarInsumoPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const supabase = createServiceClient()
+  const supabase = await createClient()
 
   const [insumoRes, sinonimosRes] = await Promise.all([
     supabase.from('insumos').select('*').eq('id', id).single(),

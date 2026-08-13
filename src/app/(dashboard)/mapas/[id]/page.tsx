@@ -1,7 +1,7 @@
 ﻿import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { ChevronLeft, CheckCircle } from 'lucide-react'
-import { createServiceClient } from '@/lib/supabase/server'
+import { createClient } from '@/lib/supabase/server'
 import { calcularScores, agruparPorInsumo, PESOS_PADRAO, type Pesos, type CandidatoItem } from '@/lib/comparacao'
 import { ComparacaoTable } from '@/components/mapas/ComparacaoTable'
 import { salvarSelecoes, aprovarMapa, excluirMapa } from '../actions'
@@ -10,7 +10,7 @@ import { ExcluirMapaButton } from './ExcluirMapaButton'
 
 export default async function MapaPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const supabase = createServiceClient()
+  const supabase = await createClient()
 
   // Busca o mapa
   const { data: mapaData } = await supabase.from('mapas_cotacao').select('*').eq('id', id).single()

@@ -2,10 +2,10 @@
 
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
-import { createServiceClient } from '@/lib/supabase/server'
+import { createClient } from '@/lib/supabase/server'
 
 export async function criarInsumo(formData: FormData) {
-  const supabase = createServiceClient()
+  const supabase = await createClient()
 
   const { data: insumo, error } = await supabase
     .from('insumos')
@@ -32,7 +32,7 @@ export async function criarInsumo(formData: FormData) {
 }
 
 export async function atualizarInsumo(id: string, formData: FormData) {
-  const supabase = createServiceClient()
+  const supabase = await createClient()
 
   const { error } = await supabase
     .from('insumos')
@@ -60,7 +60,7 @@ export async function atualizarInsumo(id: string, formData: FormData) {
 }
 
 export async function excluirInsumo(id: string) {
-  const supabase = createServiceClient()
+  const supabase = await createClient()
   const { error } = await supabase.from('insumos').delete().eq('id', id)
   if (error) throw new Error(error.message)
   revalidatePath('/insumos')

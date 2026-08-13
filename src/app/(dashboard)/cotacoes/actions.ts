@@ -19,12 +19,18 @@ function normalizarUnidade(u: string | null | undefined): string | null {
   return map[key] ?? u.trim()
 }
 import { redirect } from 'next/navigation'
-import { createServiceClient } from '@/lib/supabase/server'
-import { extrairItensOCR } from '@/lib/ocr'
+import { createClient } from '@/lib/supabase/server'
+import { extrairItensOCR, type ItemExtraido } from '@/lib/ocr'
+import { extrairItensExcel } from '@/lib/excel'
+import { getArquivoSignedUrl } from '@/lib/supabase/storage'
+
+const EXTENSOES_EXCEL = ['xlsx', 'xls']
 
 export async function criarCotacao(formData: FormData) {
-  const supabase = createServiceClient()
+  const supabase = await createClient()
 
+  // arquivo_url guarda o path do objeto no storage (bucket privado); o acesso
+  // real é sempre via signed URL gerada sob demanda em getArquivoSignedUrl.
   let arquivo_url: string | null = null
   let arquivo_nome: string | null = null
 
@@ -36,8 +42,7 @@ export async function criarCotacao(formData: FormData) {
       .from('cotacoes')
       .upload(path, arquivo)
     if (uploadError) throw new Error(`Erro no upload: ${uploadError.message}`)
-    const { data: urlData } = supabase.storage.from('cotacoes').getPublicUrl(path)
-    arquivo_url = urlData.publicUrl
+    arquivo_url = path
     arquivo_nome = arquivo.name
   }
 
@@ -66,7 +71,7 @@ export async function criarCotacao(formData: FormData) {
 }
 
 export async function atualizarCotacao(id: string, formData: FormData) {
-  const supabase = createServiceClient()
+  const supabase = await createClient()
 
   const { error } = await supabase
     .from('cotacoes')
@@ -89,7 +94,7 @@ export async function atualizarCotacao(id: string, formData: FormData) {
 }
 
 export async function adicionarItem(cotacaoId: string, formData: FormData) {
-  const supabase = createServiceClient()
+  const supabase = await createClient()
 
   const descricao = formData.get('descricao_original') as string
   let insumo_id = (formData.get('insumo_id') as string) || null
@@ -132,13 +137,13 @@ export async function adicionarItem(cotacaoId: string, formData: FormData) {
 }
 
 export async function removerItem(id: string, cotacaoId: string) {
-  const supabase = createServiceClient()
+  const supabase = await createClient()
   await supabase.from('cotacao_itens').delete().eq('id', id)
   revalidatePath(`/cotacoes/${cotacaoId}`)
 }
 
 export async function vincularItensAutomatico(cotacaoId: string): Promise<{ vinculados: number }> {
-  const supabase = createServiceClient()
+  const supabase = await createClient()
 
   const { data: itens } = await supabase
     .from('cotacao_itens')
@@ -166,7 +171,7 @@ export async function vincularItensAutomatico(cotacaoId: string): Promise<{ vinc
 }
 
 export async function vincularItemManualmente(itemId: string, insumoId: string, cotacaoId: string) {
-  const supabase = createServiceClient()
+  const supabase = await createClient()
   const { error } = await supabase
     .from('cotacao_itens')
     .update({ insumo_id: insumoId })
@@ -176,19 +181,19 @@ export async function vincularItemManualmente(itemId: string, insumoId: string, 
 }
 
 export async function removerTodosItens(cotacaoId: string) {
-  const supabase = createServiceClient()
+  const supabase = await createClient()
   await supabase.from('cotacao_itens').delete().eq('cotacao_id', cotacaoId)
   revalidatePath(`/cotacoes/${cotacaoId}`)
 }
 
 export async function excluirCotacao(id: string) {
-  const supabase = createServiceClient()
+  const supabase = await createClient()
   await supabase.from('cotacoes').delete().eq('id', id)
   revalidatePath('/cotacoes')
 }
 
 export async function extrairComOCR(cotacaoId: string): Promise<{ count: number }> {
-  const supabase = createServiceClient()
+  const supabase = await createClient()
 
   const { data: cotacao } = await supabase
     .from('cotacoes')
@@ -200,7 +205,13 @@ export async function extrairComOCR(cotacaoId: string): Promise<{ count: number 
     throw new Error('Esta cotação não tem arquivo anexado. Faça upload de uma imagem da tabela de preços.')
   }
 
-  const itens = await extrairItensOCR(cotacao.arquivo_url, cotacao.arquivo_nome ?? 'arquivo.jpg')
+  const signedUrl = await getArquivoSignedUrl(supabase, cotacao.arquivo_url)
+  if (!signedUrl) throw new Error('Não foi possível acessar o arquivo anexado.')
+
+  const extArquivo = (cotacao.arquivo_nome ?? '').split('.').pop()?.toLowerCase() ?? ''
+  const itens: ItemExtraido[] = EXTENSOES_EXCEL.includes(extArquivo)
+    ? extrairItensExcel(await (await fetch(signedUrl)).arrayBuffer())
+    : await extrairItensOCR(signedUrl, cotacao.arquivo_nome ?? 'arquivo.jpg')
 
   const { error } = await supabase.from('cotacao_itens').insert(
     itens.map((item) => ({
@@ -231,29 +242,56 @@ export async function extrairComOCR(cotacaoId: string): Promise<{ count: number 
   return { count: itens.length }
 }
 
+// Roda o OCR sequencialmente em várias cotações selecionadas na listagem — uma
+// por vez, para não estourar o circuit breaker de rate limit da Edge Function.
+export async function extrairEmLote(
+  cotacaoIds: string[],
+): Promise<{ id: string; ok: boolean; count?: number; erro?: string }[]> {
+  const resultados: { id: string; ok: boolean; count?: number; erro?: string }[] = []
+
+  for (const id of cotacaoIds) {
+    try {
+      const { count } = await extrairComOCR(id)
+      resultados.push({ id, ok: true, count })
+    } catch (err) {
+      resultados.push({ id, ok: false, erro: (err as Error).message })
+    }
+  }
+
+  revalidatePath('/cotacoes')
+  return resultados
+}
+
 export async function uploadEExtrair(cotacaoId: string, formData: FormData): Promise<{ count: number }> {
-  const supabase = createServiceClient()
+  const supabase = await createClient()
 
   const arquivo = formData.get('arquivo') as File | null
   if (!arquivo || arquivo.size === 0) throw new Error('Nenhum arquivo selecionado.')
 
   const ext = arquivo.name.split('.').pop()?.toLowerCase() ?? ''
-  const isSupported = ['jpg', 'jpeg', 'png', 'webp', 'pdf'].includes(ext)
-  if (!isSupported) throw new Error(`Formato "${ext}" não suportado. Envie uma imagem (JPEG, PNG ou WebP) ou PDF.`)
+  const isExcel = EXTENSOES_EXCEL.includes(ext)
+  const isSupported = isExcel || ['jpg', 'jpeg', 'png', 'webp', 'pdf'].includes(ext)
+  if (!isSupported) {
+    throw new Error(`Formato "${ext}" não suportado. Envie uma imagem (JPEG, PNG ou WebP), PDF ou planilha (XLSX/XLS).`)
+  }
 
   const path = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
   const { error: uploadError } = await supabase.storage.from('cotacoes').upload(path, arquivo)
   if (uploadError) throw new Error(`Erro no upload: ${uploadError.message}`)
 
-  const { data: urlData } = supabase.storage.from('cotacoes').getPublicUrl(path)
-  const arquivo_url = urlData.publicUrl
-
   await supabase
     .from('cotacoes')
-    .update({ arquivo_url, arquivo_nome: arquivo.name })
+    .update({ arquivo_url: path, arquivo_nome: arquivo.name })
     .eq('id', cotacaoId)
 
-  const itens = await extrairItensOCR(arquivo_url, arquivo.name)
+  let itens: ItemExtraido[]
+  if (isExcel) {
+    itens = extrairItensExcel(await arquivo.arrayBuffer())
+  } else {
+    const signedUrl = await getArquivoSignedUrl(supabase, path)
+    if (!signedUrl) throw new Error('Não foi possível acessar o arquivo enviado.')
+    itens = await extrairItensOCR(signedUrl, arquivo.name)
+  }
 
   const { error } = await supabase.from('cotacao_itens').insert(
     itens.map((item) => ({
@@ -297,7 +335,7 @@ export async function lancarPrecos(payload: {
     unidade: string | null
   }[]
 }) {
-  const supabase = createServiceClient()
+  const supabase = await createClient()
 
   const { data: cotacao, error: cotacaoError } = await supabase
     .from('cotacoes')

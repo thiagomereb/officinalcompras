@@ -1,9 +1,9 @@
-﻿import { createServiceClient } from '@/lib/supabase/server'
+﻿import { createClient } from '@/lib/supabase/server'
 import { BarChart3, FileDown, TrendingDown, Package, Building2, FileText } from 'lucide-react'
 import Link from 'next/link'
 
 export default async function RelatoriosPage() {
-  const supabase = createServiceClient()
+  const supabase = await createClient()
 
   const [
     { count: totalFornecedores },

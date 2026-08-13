@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { createServiceClient } from '@/lib/supabase/server'
+import { createClient } from '@/lib/supabase/server'
 import { Plus, Package, Pencil, Tag, Search } from 'lucide-react'
 
 const POR_PAGINA = 50
@@ -13,7 +13,7 @@ export default async function InsumosPage({
   const pagina = Math.max(1, parseInt(p) || 1)
   const offset = (pagina - 1) * POR_PAGINA
 
-  const supabase = createServiceClient()
+  const supabase = await createClient()
 
   let query = supabase
     .from('insumos')

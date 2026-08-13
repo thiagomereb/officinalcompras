@@ -1,5 +1,5 @@
 ﻿import Link from 'next/link'
-import { createServiceClient } from '@/lib/supabase/server'
+import { createClient } from '@/lib/supabase/server'
 import { Plus, BarChart3, Pencil, CheckCircle, FileText, Clock } from 'lucide-react'
 
 const STATUS_CONFIG = {
@@ -9,7 +9,7 @@ const STATUS_CONFIG = {
 } as const
 
 export default async function MapasPage() {
-  const supabase = createServiceClient()
+  const supabase = await createClient()
   const { data: mapas } = await supabase
     .from('mapas_cotacao')
     .select('*, mapa_cotacao_itens(id)')

@@ -1,7 +1,7 @@
 'use client'
 
 import { useRef, useState, useTransition } from 'react'
-import { Sparkles, CheckCircle, AlertCircle, Loader2, Upload } from 'lucide-react'
+import { Sparkles, CheckCircle, AlertCircle, Loader2 } from 'lucide-react'
 import { extrairComOCR, uploadEExtrair } from '@/app/(dashboard)/cotacoes/actions'
 
 interface Props {
@@ -44,6 +44,14 @@ export function OcrButton({ cotacaoId, temArquivo }: Props) {
   const [status, setStatus] = useState('')
   const [result, setResult] = useState<{ ok: boolean; msg: string } | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  function handleExtrairClick() {
+    if (temArquivo) {
+      handleReextrair()
+    } else {
+      fileInputRef.current?.click()
+    }
+  }
 
   function handleReextrair() {
     setResult(null)
@@ -99,29 +107,19 @@ export function OcrButton({ cotacaoId, temArquivo }: Props) {
       <input
         ref={fileInputRef}
         type="file"
-        accept=".jpg,.jpeg,.png,.webp,.pdf"
+        accept=".jpg,.jpeg,.png,.webp,.pdf,.xlsx,.xls"
         className="hidden"
         onChange={handleFileChange}
         disabled={pending}
       />
       <button
-        onClick={() => fileInputRef.current?.click()}
+        onClick={handleExtrairClick}
         disabled={pending}
         className="inline-flex items-center gap-2 px-4 py-2 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
       >
-        {pending ? <Loader2 size={15} className="animate-spin" /> : <Upload size={15} />}
-        {pending ? (status || 'Processando...') : 'Enviar arquivo e extrair com IA'}
+        {pending ? <Loader2 size={15} className="animate-spin" /> : <Sparkles size={15} />}
+        {pending ? (status || 'Processando...') : 'Extrair com IA'}
       </button>
-
-      {temArquivo && !pending && (
-        <button
-          onClick={handleReextrair}
-          className="inline-flex items-center gap-2 px-3 py-2 text-violet-700 border border-violet-300 bg-violet-50 text-sm font-medium rounded-lg hover:bg-violet-100 transition-colors"
-        >
-          <Sparkles size={14} />
-          Re-extrair arquivo atual
-        </button>
-      )}
 
       {result && (
         <span className={`inline-flex items-center gap-1.5 text-sm ${result.ok ? 'text-emerald-700' : 'text-red-600'}`}>

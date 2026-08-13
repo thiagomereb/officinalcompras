@@ -12,7 +12,9 @@ import {
   Settings,
   FlaskConical,
   ChevronDown,
+  LogOut,
 } from 'lucide-react'
+import { logout } from '@/app/login/actions'
 
 type NavItem = { href: string; label: string; icon: React.ElementType }
 
@@ -108,8 +110,8 @@ export function Sidebar() {
       </div>
 
       {/* User profile */}
-      <div className="px-3 pb-4 pt-2 border-t border-white/8">
-        <button className="w-full flex items-center gap-2.5 px-2 py-2 rounded-lg hover:bg-white/6 transition-colors text-left">
+      <div className="px-3 pb-4 pt-2 border-t border-white/8 flex items-center gap-1.5">
+        <button className="flex-1 flex items-center gap-2.5 px-2 py-2 rounded-lg hover:bg-white/6 transition-colors text-left min-w-0">
           <div className="w-7 h-7 rounded-full bg-gradient-to-br from-blue-400 to-indigo-600 flex items-center justify-center text-white text-[10px] font-bold shrink-0">
             OC
           </div>
@@ -119,6 +121,15 @@ export function Sidebar() {
           </div>
           <ChevronDown size={12} className="text-slate-500 shrink-0" />
         </button>
+        <form action={logout}>
+          <button
+            type="submit"
+            title="Sair"
+            className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-white hover:bg-white/6 transition-colors shrink-0"
+          >
+            <LogOut size={14} />
+          </button>
+        </form>
       </div>
     </aside>
   )

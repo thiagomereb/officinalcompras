@@ -1,5 +1,5 @@
 ﻿import { notFound } from 'next/navigation'
-import { createServiceClient } from '@/lib/supabase/server'
+import { createClient } from '@/lib/supabase/server'
 import { calcularScores, agruparPorInsumo, PESOS_PADRAO, type Pesos, type CandidatoItem } from '@/lib/comparacao'
 import { PrintButton } from './PrintButton'
 
@@ -10,7 +10,7 @@ function formatDate(d: string | null) {
 
 export default async function ImprimirMapaPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const supabase = createServiceClient()
+  const supabase = await createClient()
 
   const { data: mapa } = await supabase.from('mapas_cotacao').select('*').eq('id', id).single()
   if (!mapa) notFound()

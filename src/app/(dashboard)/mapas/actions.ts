@@ -2,11 +2,11 @@
 
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
-import { createServiceClient } from '@/lib/supabase/server'
+import { createClient } from '@/lib/supabase/server'
 import type { Pesos } from '@/lib/comparacao'
 
 export async function criarMapa(formData: FormData) {
-  const supabase = createServiceClient()
+  const supabase = await createClient()
 
   const cotacoesIds = formData.getAll('cotacoes_ids') as string[]
   const pesos: Pesos = {
@@ -37,7 +37,7 @@ export async function salvarSelecoes(
   mapaId: string,
   selecoes: { insumo_id: string; cotacao_item_id: string; quantidade: number }[]
 ) {
-  const supabase = createServiceClient()
+  const supabase = await createClient()
 
   await supabase.from('mapa_cotacao_itens').delete().eq('mapa_id', mapaId)
 
@@ -56,14 +56,14 @@ export async function salvarSelecoes(
 }
 
 export async function aprovarMapa(mapaId: string) {
-  const supabase = createServiceClient()
+  const supabase = await createClient()
   await supabase.from('mapas_cotacao').update({ status: 'aprovado' }).eq('id', mapaId)
   revalidatePath(`/mapas/${mapaId}`)
   revalidatePath('/mapas')
 }
 
 export async function excluirMapa(id: string) {
-  const supabase = createServiceClient()
+  const supabase = await createClient()
   await supabase.from('mapas_cotacao').delete().eq('id', id)
   revalidatePath('/mapas')
 }

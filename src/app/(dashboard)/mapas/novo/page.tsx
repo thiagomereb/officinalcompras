@@ -1,12 +1,12 @@
 ﻿import Link from 'next/link'
 import { ChevronLeft, FileText, Plus } from 'lucide-react'
-import { createServiceClient } from '@/lib/supabase/server'
+import { createClient } from '@/lib/supabase/server'
 import { PesosEditor } from '@/components/mapas/PesosEditor'
 import { PESOS_PADRAO } from '@/lib/comparacao'
 import { criarMapa } from '../actions'
 
 export default async function NovoMapaPage() {
-  const supabase = createServiceClient()
+  const supabase = await createClient()
   const { data: cotacoes } = await supabase
     .from('cotacoes')
     .select('id, data_cotacao, fornecedores(razao_social, nome_fantasia), cotacao_itens(id)')

@@ -1,4 +1,4 @@
-import { createServiceClient } from '@/lib/supabase/server'
+import { createClient } from '@/lib/supabase/server'
 
 export type ItemExtraido = {
   descricao: string
@@ -14,7 +14,7 @@ export type ItemExtraido = {
 }
 
 export async function extrairItensOCR(arquivoUrl: string, arquivoNome: string): Promise<ItemExtraido[]> {
-  const supabase = createServiceClient()
+  const supabase = await createClient()
 
   const { data, error } = await supabase.functions.invoke('ocr-extrair', {
     body: { arquivo_url: arquivoUrl, arquivo_nome: arquivoNome },

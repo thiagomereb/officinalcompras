@@ -1,4 +1,4 @@
-﻿import { createServiceClient } from '@/lib/supabase/server'
+﻿import { createClient } from '@/lib/supabase/server'
 import { calcularScores, agruparPorInsumo, PESOS_PADRAO, type CandidatoItem } from '@/lib/comparacao'
 import { KpiCard } from '@/components/dashboard/KpiCard'
 import { ComparativoTable, type ComparativoRow } from '@/components/dashboard/ComparativoTable'
@@ -10,7 +10,7 @@ import { TrendingDown, Package, Building2, Bell } from 'lucide-react'
 import Link from 'next/link'
 
 export default async function DashboardPage() {
-  const supabase = createServiceClient()
+  const supabase = await createClient()
 
   const today = new Date().toISOString().split('T')[0]
   const in7Days = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]

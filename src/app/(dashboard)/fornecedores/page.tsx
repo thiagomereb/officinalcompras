@@ -1,9 +1,9 @@
 import Link from 'next/link'
-import { createServiceClient } from '@/lib/supabase/server'
+import { createClient } from '@/lib/supabase/server'
 import { Plus, Building2, Mail, Phone, Pencil } from 'lucide-react'
 
 export default async function FornecedoresPage() {
-  const supabase = createServiceClient()
+  const supabase = await createClient()
   const { data: fornecedores } = await supabase
     .from('fornecedores')
     .select('*')

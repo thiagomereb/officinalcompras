@@ -1,7 +1,8 @@
 ﻿import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { ChevronLeft, Paperclip, AlertTriangle } from 'lucide-react'
-import { createServiceClient } from '@/lib/supabase/server'
+import { createClient } from '@/lib/supabase/server'
+import { getArquivoSignedUrl } from '@/lib/supabase/storage'
 import type { Tables } from '@/types/database'
 import { CotacaoForm } from '@/components/cotacoes/CotacaoForm'
 import { AdicionarItemForm } from '@/components/cotacoes/AdicionarItemForm'
@@ -29,7 +30,7 @@ function diasAteVencer(validade: string | null) {
 export default async function CotacaoPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ aba?: string }> }) {
   const { id } = await params
   const { aba } = await searchParams
-  const supabase = createServiceClient()
+  const supabase = await createClient()
 
   const [cotacaoRes, fornecedoresRes, itensRes, insumosRes] = await Promise.all([
     supabase.from('cotacoes').select('*, fornecedores(razao_social, nome_fantasia)').eq('id', id).single(),
@@ -52,6 +53,7 @@ export default async function CotacaoPage({ params, searchParams }: { params: Pr
 
   const updateAction = atualizarCotacao.bind(null, id)
   const diasValidade = diasAteVencer(cotacao.validade_cotacao)
+  const arquivoSignedUrl = await getArquivoSignedUrl(supabase, cotacao.arquivo_url)
 
   // Busca sinônimos para detectar duplicatas entre insumos distintos (ex: "Cafeína" e "Cafeína anidra")
   const insumoIdsLinked = [...new Set(itens.filter(i => i.insumo_id).map(i => i.insumo_id!))]
@@ -119,9 +121,9 @@ export default async function CotacaoPage({ params, searchParams }: { params: Pr
             <p className="text-gray-500 mt-1">Data: {formatDate(cotacao.data_cotacao)}</p>
           </div>
           <div className="flex items-center gap-3">
-            {cotacao.arquivo_url && (
+            {arquivoSignedUrl && (
               <a
-                href={cotacao.arquivo_url}
+                href={arquivoSignedUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-2 px-3 py-2 text-sm text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"

@@ -1,11 +1,11 @@
 ﻿import Link from 'next/link'
 import { ChevronLeft, Building2, Plus } from 'lucide-react'
-import { createServiceClient } from '@/lib/supabase/server'
+import { createClient } from '@/lib/supabase/server'
 import { CotacaoForm } from '@/components/cotacoes/CotacaoForm'
 import { criarCotacao } from '../actions'
 
 export default async function NovaCotacaoPage() {
-  const supabase = createServiceClient()
+  const supabase = await createClient()
   const { data: fornecedores } = await supabase
     .from('fornecedores')
     .select('*')

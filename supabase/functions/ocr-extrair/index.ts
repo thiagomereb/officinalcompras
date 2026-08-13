@@ -183,6 +183,31 @@ async function verificarRateLimit(supabase: ReturnType<typeof createClient>): Pr
   return { bloqueado: false }
 }
 
+// Impede SSRF: só permite baixar de signed URLs do próprio bucket de storage
+// deste projeto, nunca de um host arbitrário informado pelo caller.
+function validarArquivoUrl(urlStr: unknown, supabaseUrl: string): string {
+  if (typeof urlStr !== 'string') throw new Error('arquivo_url inválida.')
+
+  let url: URL
+  try {
+    url = new URL(urlStr)
+  } catch {
+    throw new Error('arquivo_url inválida.')
+  }
+
+  const storageHost = new URL(supabaseUrl).host
+  const isStorageUrl =
+    url.protocol === 'https:' &&
+    url.host === storageHost &&
+    url.pathname.startsWith('/storage/v1/object/sign/cotacoes/')
+
+  if (!isStorageUrl) {
+    throw new Error('arquivo_url deve ser uma signed URL do storage deste projeto.')
+  }
+
+  return url.toString()
+}
+
 async function fetchGeminiWithRetry(url: string, body: string, tentativa = 1): Promise<Response> {
   const controller = new AbortController()
   const timeoutId = setTimeout(() => controller.abort(), GEMINI_TIMEOUT_MS)
@@ -245,16 +270,27 @@ Deno.serve(async (req) => {
       )
     }
 
+    const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
     const supabase = createClient(
-      Deno.env.get('SUPABASE_URL')!,
+      SUPABASE_URL,
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
     )
 
-    const { arquivo_url, arquivo_nome } = await req.json()
+    const { arquivo_url: arquivoUrlRaw, arquivo_nome } = await req.json()
 
-    if (!arquivo_url || !arquivo_nome) {
+    if (!arquivoUrlRaw || !arquivo_nome) {
       return new Response(
         JSON.stringify({ error: 'arquivo_url e arquivo_nome são obrigatórios.' }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } },
+      )
+    }
+
+    let arquivo_url: string
+    try {
+      arquivo_url = validarArquivoUrl(arquivoUrlRaw, SUPABASE_URL)
+    } catch (err) {
+      return new Response(
+        JSON.stringify({ error: (err as Error).message }),
         { status: 400, headers: { 'Content-Type': 'application/json' } },
       )
     }
@@ -326,7 +362,9 @@ Deno.serve(async (req) => {
       },
     })
 
-    const MODELOS = ['gemini-2.0-flash', 'gemini-1.5-flash']
+    // gemini-2.0-flash e gemini-1.5-flash foram desativados pelo Google — ambos
+    // devolvem 404 hoje. Modelos abaixo têm tier gratuito confirmado na API.
+    const MODELOS = ['gemini-2.5-flash', 'gemini-2.5-flash-lite']
     let geminiResp: Response | null = null
 
     for (const modelo of MODELOS) {
