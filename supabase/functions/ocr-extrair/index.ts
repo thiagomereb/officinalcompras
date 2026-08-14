@@ -251,23 +251,31 @@ async function fetchGeminiWithRetry(url: string, body: string, tentativa = 1): P
   return resp
 }
 
+// Esta função é chamada direto do navegador, então TODA resposta precisa dos
+// headers de CORS — inclusive as de erro, senão o browser bloqueia a resposta
+// e o cliente recebe um "Failed to fetch" sem a mensagem real.
+const CORS_HEADERS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+}
+
+function jsonResponse(body: unknown, status = 200, extraHeaders: Record<string, string> = {}) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...CORS_HEADERS, 'Content-Type': 'application/json', ...extraHeaders },
+  })
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
-    return new Response(null, {
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-      },
-    })
+    return new Response(null, { headers: CORS_HEADERS })
   }
 
   try {
     const apiKey = Deno.env.get('GEMINI_API_KEY')
     if (!apiKey) {
-      return new Response(
-        JSON.stringify({ error: 'Secret GEMINI_API_KEY não configurado.' }),
-        { status: 500, headers: { 'Content-Type': 'application/json' } },
-      )
+      return jsonResponse({ error: 'Secret GEMINI_API_KEY não configurado.' }, 500)
     }
 
     const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
@@ -279,29 +287,23 @@ Deno.serve(async (req) => {
     const { arquivo_url: arquivoUrlRaw, arquivo_nome } = await req.json()
 
     if (!arquivoUrlRaw || !arquivo_nome) {
-      return new Response(
-        JSON.stringify({ error: 'arquivo_url e arquivo_nome são obrigatórios.' }),
-        { status: 400, headers: { 'Content-Type': 'application/json' } },
-      )
+      return jsonResponse({ error: 'arquivo_url e arquivo_nome são obrigatórios.' }, 400)
     }
 
     let arquivo_url: string
     try {
       arquivo_url = validarArquivoUrl(arquivoUrlRaw, SUPABASE_URL)
     } catch (err) {
-      return new Response(
-        JSON.stringify({ error: (err as Error).message }),
-        { status: 400, headers: { 'Content-Type': 'application/json' } },
-      )
+      return jsonResponse({ error: (err as Error).message }, 400)
     }
 
     const ext = String(arquivo_nome).split('.').pop()?.toLowerCase() ?? ''
     const isImage = ['jpg', 'jpeg', 'png', 'webp', 'gif'].includes(ext)
 
     if (!isImage) {
-      return new Response(
-        JSON.stringify({ error: `Formato "${ext}" não suportado. Envie como imagem (JPEG, PNG ou WebP).` }),
-        { status: 422, headers: { 'Content-Type': 'application/json' } },
+      return jsonResponse(
+        { error: `Formato "${ext}" não suportado. Envie como imagem (JPEG, PNG ou WebP).` },
+        422,
       )
     }
 
@@ -311,19 +313,18 @@ Deno.serve(async (req) => {
     if (contentLength > MAX_FILE_BYTES) {
       const sizeMB = (contentLength / 1024 / 1024).toFixed(1)
       console.warn(`[ocr-extrair] Arquivo rejeitado: ${sizeMB}MB > limite de ${MAX_FILE_BYTES / 1024 / 1024}MB`)
-      return new Response(
-        JSON.stringify({ error: `Arquivo muito grande (${sizeMB}MB). O limite é ${MAX_FILE_BYTES / 1024 / 1024}MB. Comprima a imagem ou divida o PDF em partes menores.` }),
-        { status: 400, headers: { 'Content-Type': 'application/json' } },
+      return jsonResponse(
+        { error: `Arquivo muito grande (${sizeMB}MB). O limite é ${MAX_FILE_BYTES / 1024 / 1024}MB. Comprima a imagem ou divida o PDF em partes menores.` },
+        400,
       )
     }
 
     // 2. CIRCUIT BREAKER: verifica rate limit antes de chamar a API
     const rateCheck = await verificarRateLimit(supabase)
     if (rateCheck.bloqueado) {
-      return new Response(
-        JSON.stringify({ error: rateCheck.mensagem }),
-        { status: 429, headers: { 'Content-Type': 'application/json', 'Retry-After': String(rateCheck.retryAfterMinutos * 60) } },
-      )
+      return jsonResponse({ error: rateCheck.mensagem }, 429, {
+        'Retry-After': String(rateCheck.retryAfterMinutos * 60),
+      })
     }
 
     // Baixa a imagem e converte para base64
@@ -334,9 +335,9 @@ Deno.serve(async (req) => {
     // Valida tamanho real após download (caso HEAD não tenha retornado Content-Length)
     if (imgBuffer.byteLength > MAX_FILE_BYTES) {
       const sizeMB = (imgBuffer.byteLength / 1024 / 1024).toFixed(1)
-      return new Response(
-        JSON.stringify({ error: `Arquivo muito grande (${sizeMB}MB). O limite é ${MAX_FILE_BYTES / 1024 / 1024}MB. Comprima a imagem ou divida o PDF em partes menores.` }),
-        { status: 400, headers: { 'Content-Type': 'application/json' } },
+      return jsonResponse(
+        { error: `Arquivo muito grande (${sizeMB}MB). O limite é ${MAX_FILE_BYTES / 1024 / 1024}MB. Comprima a imagem ou divida o PDF em partes menores.` },
+        400,
       )
     }
     const bytes = new Uint8Array(imgBuffer)
@@ -381,9 +382,9 @@ Deno.serve(async (req) => {
     }
 
     if (!geminiResp) {
-      return new Response(
-        JSON.stringify({ error: 'Todos os modelos de IA estão sobrecarregados no momento. Tente novamente em alguns minutos.' }),
-        { status: 503, headers: { 'Content-Type': 'application/json' } },
+      return jsonResponse(
+        { error: 'Todos os modelos de IA estão sobrecarregados no momento. Tente novamente em alguns minutos.' },
+        503,
       )
     }
 
@@ -393,16 +394,16 @@ Deno.serve(async (req) => {
       if (geminiResp.status === 429) {
         const motivo = classify429(apiMsg)
         console.error(`[ocr-extrair] Esgotadas ${GEMINI_MAX_RETRIES} retentativas. ${motivo} | mensagem: ${apiMsg}`)
-        return new Response(
-          JSON.stringify({ error: `${motivo}. Tente novamente em alguns minutos.` }),
-          { status: 429, headers: { 'Content-Type': 'application/json', 'Retry-After': '120' } },
-        )
+        return jsonResponse({ error: `${motivo}. Tente novamente em alguns minutos.` }, 429, {
+          'Retry-After': '120',
+        })
       }
       if (geminiResp.status === 503 || geminiResp.status === 529) {
         console.error(`[ocr-extrair] Modelo sobrecarregado após ${GEMINI_MAX_RETRIES} tentativas. status=${geminiResp.status}`)
-        return new Response(
-          JSON.stringify({ error: 'O modelo de IA está com alta demanda no momento. Aguarde alguns segundos e tente novamente.' }),
-          { status: 503, headers: { 'Content-Type': 'application/json', 'Retry-After': '30' } },
+        return jsonResponse(
+          { error: 'O modelo de IA está com alta demanda no momento. Aguarde alguns segundos e tente novamente.' },
+          503,
+          { 'Retry-After': '30' },
         )
       }
       console.error(`[ocr-extrair] Erro da API Gemini status=${geminiResp.status} | mensagem: ${apiMsg}`)
@@ -439,15 +440,10 @@ Deno.serve(async (req) => {
       }),
     )
 
-    return new Response(JSON.stringify({ itens, fornecedor: parsed.fornecedor ?? null }), {
-      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
-    })
+    return jsonResponse({ itens, fornecedor: parsed.fornecedor ?? null })
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Erro inesperado.'
     console.error(`[ocr-extrair] erro fatal: ${msg}`)
-    return new Response(JSON.stringify({ error: msg }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json' },
-    })
+    return jsonResponse({ error: msg }, 500)
   }
 })
