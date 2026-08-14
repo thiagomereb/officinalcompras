@@ -134,6 +134,9 @@ function jaroWinkler(s1: string, s2: string): number {
 }
 
 
+// Por modelo. A Edge Function tem 150s de wall clock no total, então os dois
+// modelos da lista cabem numa tentativa cada, ainda sobrando margem para o
+// download da imagem e o casamento de insumos. Medido: 9-29s por chamada.
 const GEMINI_TIMEOUT_MS = 60_000
 const GEMINI_MAX_RETRIES = 3
 const MAX_FILE_BYTES = 5 * 1024 * 1024  // 5 MB
@@ -223,7 +226,9 @@ async function fetchGeminiWithRetry(url: string, body: string, tentativa = 1): P
   } catch (err) {
     clearTimeout(timeoutId)
     if ((err as Error).name === 'AbortError') {
-      throw new Error(`Timeout: Gemini não respondeu em ${GEMINI_TIMEOUT_MS / 1000}s`)
+      throw new Error(
+        `A IA não respondeu em ${GEMINI_TIMEOUT_MS / 1000}s. Tente uma imagem menor ou recorte a tabela em partes.`,
+      )
     }
     throw err
   }
@@ -360,30 +365,49 @@ Deno.serve(async (req) => {
       generationConfig: {
         response_mime_type: 'application/json',
         temperature: 0,
+        // O 2.5-flash liga "thinking" por padrão, o que dobrava/triplicava a
+        // latência e estourava o timeout. Extrair tabela é tarefa de leitura,
+        // não de raciocínio — budget 0 desliga e volta a responder rápido.
+        thinkingConfig: { thinkingBudget: 0 },
       },
     })
 
-    // gemini-2.0-flash e gemini-1.5-flash foram desativados pelo Google — ambos
-    // devolvem 404 hoje. Modelos abaixo têm tier gratuito confirmado na API.
-    const MODELOS = ['gemini-2.5-flash', 'gemini-2.5-flash-lite']
+    // Medido nesta base de tabelas: o 3.1-flash-lite extrai os mesmos itens que
+    // o 3.5-flash em ~1/3 do tempo (9-19s contra 28-29s), e o 2.5-flash chegava
+    // a estourar 110s na mesma imagem. O 3.5-flash fica como reserva de
+    // qualidade. Evite voltar para 2.5-flash-lite: foi descontinuado e responde
+    // 400 "no longer available to new users".
+    const MODELOS = ['gemini-3.1-flash-lite', 'gemini-3.5-flash']
     let geminiResp: Response | null = null
+    let ultimoErro: Error | null = null
 
     for (const modelo of MODELOS) {
-      const r = await fetchGeminiWithRetry(
-        `https://generativelanguage.googleapis.com/v1beta/models/${modelo}:generateContent?key=${apiKey}`,
-        requestBody,
-      )
-      if (r.status === 503 || r.status === 529) {
-        console.warn(`[ocr-extrair] ${modelo} sobrecarregado, tentando próximo modelo...`)
-        continue
+      try {
+        const r = await fetchGeminiWithRetry(
+          `https://generativelanguage.googleapis.com/v1beta/models/${modelo}:generateContent?key=${apiKey}`,
+          requestBody,
+        )
+        if (r.status === 503 || r.status === 529) {
+          console.warn(`[ocr-extrair] ${modelo} sobrecarregado, tentando próximo modelo...`)
+          continue
+        }
+        geminiResp = r
+        break
+      } catch (err) {
+        // Timeout ou falha de rede não devem abortar tudo: o próximo modelo da
+        // lista ainda pode dar conta.
+        ultimoErro = err as Error
+        console.warn(`[ocr-extrair] ${modelo} falhou: ${ultimoErro.message}`)
       }
-      geminiResp = r
-      break
     }
 
     if (!geminiResp) {
       return jsonResponse(
-        { error: 'Todos os modelos de IA estão sobrecarregados no momento. Tente novamente em alguns minutos.' },
+        {
+          error:
+            ultimoErro?.message ??
+            'Todos os modelos de IA estão sobrecarregados no momento. Tente novamente em alguns minutos.',
+        },
         503,
       )
     }
