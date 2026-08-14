@@ -1,4 +1,4 @@
-﻿export type Json =
+export type Json =
   | string
   | number
   | boolean
@@ -14,30 +14,48 @@ export type Database = {
   }
   public: {
     Tables: {
-      configuracoes: {
+      api_usage_limits: {
         Row: {
-          id: string
           chave: string
-          valor: string | null
-          descricao: string | null
-          created_at: string | null
-          updated_at: string | null
+          created_at: string
+          id: string
         }
         Insert: {
+          chave?: string
+          created_at?: string
           id?: string
-          chave: string
-          valor?: string | null
-          descricao?: string | null
-          created_at?: string | null
-          updated_at?: string | null
         }
         Update: {
-          id?: string
           chave?: string
-          valor?: string | null
-          descricao?: string | null
+          created_at?: string
+          id?: string
+        }
+        Relationships: []
+      }
+      configuracoes: {
+        Row: {
+          chave: string
+          created_at: string | null
+          descricao: string | null
+          id: string
+          updated_at: string | null
+          valor: string | null
+        }
+        Insert: {
+          chave: string
           created_at?: string | null
+          descricao?: string | null
+          id?: string
           updated_at?: string | null
+          valor?: string | null
+        }
+        Update: {
+          chave?: string
+          created_at?: string | null
+          descricao?: string | null
+          id?: string
+          updated_at?: string | null
+          valor?: string | null
         }
         Relationships: []
       }
@@ -349,12 +367,48 @@ export type Database = {
         }
         Relationships: []
       }
+      sinonimos_ref: {
+        Row: {
+          id: number
+          produto_padrao: string
+          termo: string
+        }
+        Insert: {
+          id?: number
+          produto_padrao: string
+          termo: string
+        }
+        Update: {
+          id?: number
+          produto_padrao?: string
+          termo?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      buscar_insumo_por_descricao: {
+        Args: { p_descricao: string; p_limite?: number }
+        Returns: {
+          insumo_id: string
+          nome_padrao: string
+          similaridade: number
+        }[]
+      }
+      buscar_por_sinonimo: {
+        Args: { descricao: string; limite?: number }
+        Returns: {
+          produto_padrao: string
+          similaridade: number
+          termo_encontrado: string
+        }[]
+      }
+      get_secret: { Args: { secret_name: string }; Returns: string }
+      show_limit: { Args: never; Returns: number }
+      show_trgm: { Args: { "": string }; Returns: string[] }
     }
     Enums: {
       [_ in never]: never

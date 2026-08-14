@@ -103,8 +103,9 @@ export async function adicionarItem(cotacaoId: string, formData: FormData) {
   if (!insumo_id && descricao) {
     const { data: match } = await supabase
       .rpc('buscar_insumo_por_descricao', { p_descricao: descricao, p_limite: 1 })
-    if (match?.[0]?.similaridade >= 0.45) {
-      insumo_id = match[0].insumo_id
+    const melhor = match?.[0]
+    if (melhor && melhor.similaridade >= 0.45) {
+      insumo_id = melhor.insumo_id
     }
   }
 
@@ -157,10 +158,11 @@ export async function vincularItensAutomatico(cotacaoId: string): Promise<{ vinc
   for (const item of itens) {
     const { data: match } = await supabase
       .rpc('buscar_insumo_por_descricao', { p_descricao: item.descricao_original, p_limite: 1 })
-    if (match?.[0]?.similaridade >= 0.45) {
+    const melhor = match?.[0]
+    if (melhor && melhor.similaridade >= 0.45) {
       await supabase
         .from('cotacao_itens')
-        .update({ insumo_id: match[0].insumo_id })
+        .update({ insumo_id: melhor.insumo_id })
         .eq('id', item.id)
       vinculados++
     }
