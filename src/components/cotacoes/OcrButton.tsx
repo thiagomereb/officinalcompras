@@ -2,7 +2,8 @@
 
 import { useRef, useState, useTransition } from 'react'
 import { Sparkles, CheckCircle, AlertCircle, Loader2, Paperclip } from 'lucide-react'
-import { extrairComOCR, uploadEExtrair } from '@/app/(dashboard)/cotacoes/actions'
+import { prepararExtracao, uploadArquivo } from '@/app/(dashboard)/cotacoes/actions'
+import { concluirExtracao } from '@/lib/ocr-browser'
 
 interface Props {
   cotacaoId: string
@@ -59,13 +60,16 @@ export function OcrButton({ cotacaoId, temArquivo }: Props) {
 
   function handleReextrair() {
     setResult(null)
-    setStatus('')
+    setStatus('Extraindo com IA...')
     startTransition(async () => {
       try {
-        const { count } = await extrairComOCR(cotacaoId)
+        const preparo = await prepararExtracao(cotacaoId)
+        const count = await concluirExtracao(cotacaoId, preparo)
         setResult({ ok: true, msg: `${count} item(s) extraído(s) com sucesso!` })
       } catch (err) {
         setResult({ ok: false, msg: (err as Error).message })
+      } finally {
+        setStatus('')
       }
     })
   }
@@ -89,11 +93,12 @@ export function OcrButton({ cotacaoId, temArquivo }: Props) {
         }
 
         let total = 0
-        for (const img of arquivos) {
+        for (const [i, img] of arquivos.entries()) {
+          if (arquivos.length > 1) setStatus(`Extraindo ${i + 1} de ${arquivos.length}...`)
           const formData = new FormData()
           formData.append('arquivo', img)
-          const { count } = await uploadEExtrair(cotacaoId, formData)
-          total += count
+          const preparo = await uploadArquivo(cotacaoId, formData)
+          total += await concluirExtracao(cotacaoId, preparo)
         }
 
         setResult({ ok: true, msg: `${total} item(s) extraído(s) com sucesso!` })

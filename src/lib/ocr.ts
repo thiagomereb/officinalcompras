@@ -1,5 +1,3 @@
-import { createClient } from '@/lib/supabase/server'
-
 export type ItemExtraido = {
   descricao: string
   preco_unitario: number
@@ -13,19 +11,9 @@ export type ItemExtraido = {
   cas: string | null
 }
 
-export async function extrairItensOCR(arquivoUrl: string, arquivoNome: string): Promise<ItemExtraido[]> {
-  const supabase = await createClient()
-
-  const { data, error } = await supabase.functions.invoke('ocr-extrair', {
-    body: { arquivo_url: arquivoUrl, arquivo_nome: arquivoNome },
-  })
-
-  if (error) {
-    const body = await (error as { context?: Response }).context?.json?.().catch(() => null) as { error?: string } | null
-    throw new Error(body?.error ?? error.message)
-  }
-  if (data?.error) throw new Error(data.error)
-  if (!Array.isArray(data?.itens)) throw new Error('Resposta inesperada da Edge Function.')
-
-  return data.itens as ItemExtraido[]
-}
+// O que uma Server Action devolve ao navegador para ele conduzir a extração.
+// Planilhas já vêm processadas ("concluido"); imagens/PDF exigem a chamada de
+// OCR, que o navegador faz direto na Edge Function (ver ocr-browser.ts).
+export type PreparoExtracao =
+  | { modo: 'concluido'; count: number }
+  | { modo: 'ocr'; signedUrl: string; arquivoNome: string }

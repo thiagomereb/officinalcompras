@@ -3,7 +3,8 @@
 import { useMemo, useState, useTransition } from 'react'
 import Link from 'next/link'
 import { Search, Pencil, Clock, CheckCircle, AlertCircle, Paperclip, Sparkles, Loader2, FileText } from 'lucide-react'
-import { extrairEmLote } from '@/app/(dashboard)/cotacoes/actions'
+import { prepararExtracao } from '@/app/(dashboard)/cotacoes/actions'
+import { concluirExtracao } from '@/lib/ocr-browser'
 
 export type CotacaoRow = {
   id: string
@@ -34,6 +35,7 @@ export function CotacoesTable({ cotacoes }: { cotacoes: CotacaoRow[] }) {
   const [busca, setBusca] = useState('')
   const [selecionados, setSelecionados] = useState<Set<string>>(new Set())
   const [pending, startTransition] = useTransition()
+  const [progresso, setProgresso] = useState('')
   const [resultado, setResultado] = useState<string | null>(null)
 
   // Filtrar não mexe na seleção — arquivos escolhidos continuam marcados
@@ -73,17 +75,31 @@ export function CotacoesTable({ cotacoes }: { cotacoes: CotacaoRow[] }) {
     })
   }
 
+  // O loop roda no navegador (e não numa Server Action) porque cada OCR pode
+  // levar minutos — uma Netlify Function estouraria o limite de 60s.
   function handleExtrairSelecionados() {
     setResultado(null)
     const ids = [...selecionados]
     startTransition(async () => {
-      const resultados = await extrairEmLote(ids)
-      const ok = resultados.filter((r) => r.ok).length
-      const falhas = resultados.filter((r) => !r.ok)
+      let ok = 0
+      let falhas = 0
+
+      for (const [i, id] of ids.entries()) {
+        setProgresso(`Extraindo ${i + 1} de ${ids.length}...`)
+        try {
+          const preparo = await prepararExtracao(id)
+          await concluirExtracao(id, preparo)
+          ok++
+        } catch {
+          falhas++
+        }
+      }
+
+      setProgresso('')
       setResultado(
-        falhas.length === 0
+        falhas === 0
           ? `${ok} cotação(ões) extraída(s) com sucesso!`
-          : `${ok} extraída(s), ${falhas.length} com erro.`,
+          : `${ok} extraída(s), ${falhas} com erro.`,
       )
       setSelecionados(new Set())
     })
@@ -111,7 +127,7 @@ export function CotacoesTable({ cotacoes }: { cotacoes: CotacaoRow[] }) {
               className="inline-flex items-center gap-2 px-4 py-2 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
             >
               {pending ? <Loader2 size={15} className="animate-spin" /> : <Sparkles size={15} />}
-              {pending ? 'Extraindo...' : 'Extrair com IA'}
+              {pending ? progresso || 'Extraindo...' : 'Extrair com IA'}
             </button>
           </div>
         )}

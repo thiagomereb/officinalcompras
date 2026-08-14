@@ -20,11 +20,82 @@ function normalizarUnidade(u: string | null | undefined): string | null {
 }
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
-import { extrairItensOCR, type ItemExtraido } from '@/lib/ocr'
+import type { ItemExtraido, PreparoExtracao } from '@/lib/ocr'
 import { extrairItensExcel } from '@/lib/excel'
 import { getArquivoSignedUrl } from '@/lib/supabase/storage'
 
 const EXTENSOES_EXCEL = ['xlsx', 'xls']
+
+function textoOuNulo(v: unknown): string | null {
+  return typeof v === 'string' && v.trim() ? v.trim() : null
+}
+
+function numeroOuNulo(v: unknown): number | null {
+  if (v === null || v === undefined || v === '') return null
+  const n = Number(v)
+  return Number.isFinite(n) ? n : null
+}
+
+// Os itens chegam do navegador (que fala direto com a Edge Function de OCR),
+// então valida o formato aqui em vez de confiar no que vem pela rede.
+function sanitizarItens(itens: unknown): ItemExtraido[] {
+  if (!Array.isArray(itens)) throw new Error('Lista de itens inválida.')
+
+  return itens.flatMap((raw) => {
+    const item = (raw ?? {}) as Record<string, unknown>
+    const descricao = textoOuNulo(item.descricao)
+    const preco = numeroOuNulo(item.preco_unitario)
+    if (!descricao || preco === null || preco <= 0) return []
+
+    return [
+      {
+        descricao,
+        preco_unitario: preco,
+        quantidade_embalagem: numeroOuNulo(item.quantidade_embalagem),
+        quantidade: numeroOuNulo(item.quantidade),
+        unidade: textoOuNulo(item.unidade),
+        pais_origem: textoOuNulo(item.pais_origem),
+        ipi: numeroOuNulo(item.ipi),
+        st: numeroOuNulo(item.st),
+        validade: textoOuNulo(item.validade),
+        cas: textoOuNulo(item.cas),
+      },
+    ]
+  })
+}
+
+async function gravarItens(cotacaoId: string, itens: ItemExtraido[]): Promise<number> {
+  const supabase = await createClient()
+
+  const { error } = await supabase.from('cotacao_itens').insert(
+    itens.map((item) => ({
+      cotacao_id: cotacaoId,
+      descricao_original: item.descricao,
+      preco_unitario: item.preco_unitario,
+      quantidade_minima: item.quantidade_embalagem,
+      quantidade: item.quantidade,
+      unidade: normalizarUnidade(item.unidade),
+      pais_origem: item.pais_origem,
+      ipi: item.ipi ?? 0,
+      st: item.st ?? 0,
+      validade: item.validade,
+      cas: item.cas ?? null,
+      insumo_id: null,
+    })),
+  )
+
+  if (error) throw new Error(error.message)
+
+  await supabase
+    .from('cotacoes')
+    .update({ status: 'processado' })
+    .eq('id', cotacaoId)
+    .eq('status', 'processando')
+
+  revalidatePath(`/cotacoes/${cotacaoId}`)
+  revalidatePath('/cotacoes')
+  return itens.length
+}
 
 export async function criarCotacao(formData: FormData) {
   const supabase = await createClient()
@@ -194,7 +265,9 @@ export async function excluirCotacao(id: string) {
   revalidatePath('/cotacoes')
 }
 
-export async function extrairComOCR(cotacaoId: string): Promise<{ count: number }> {
+// Prepara a extração do arquivo já anexado. Planilha resolve aqui mesmo
+// (rápido); imagem/PDF devolve a signed URL para o navegador chamar o OCR.
+export async function prepararExtracao(cotacaoId: string): Promise<PreparoExtracao> {
   const supabase = await createClient()
 
   const { data: cotacao } = await supabase
@@ -210,61 +283,19 @@ export async function extrairComOCR(cotacaoId: string): Promise<{ count: number 
   const signedUrl = await getArquivoSignedUrl(supabase, cotacao.arquivo_url)
   if (!signedUrl) throw new Error('Não foi possível acessar o arquivo anexado.')
 
-  const extArquivo = (cotacao.arquivo_nome ?? '').split('.').pop()?.toLowerCase() ?? ''
-  const itens: ItemExtraido[] = EXTENSOES_EXCEL.includes(extArquivo)
-    ? extrairItensExcel(await (await fetch(signedUrl)).arrayBuffer())
-    : await extrairItensOCR(signedUrl, cotacao.arquivo_nome ?? 'arquivo.jpg')
+  const arquivoNome = cotacao.arquivo_nome ?? 'arquivo.jpg'
+  const ext = arquivoNome.split('.').pop()?.toLowerCase() ?? ''
 
-  const { error } = await supabase.from('cotacao_itens').insert(
-    itens.map((item) => ({
-      cotacao_id: cotacaoId,
-      descricao_original: item.descricao,
-      preco_unitario: item.preco_unitario,
-      quantidade_minima: item.quantidade_embalagem,
-      quantidade: item.quantidade,
-      unidade: normalizarUnidade(item.unidade),
-      pais_origem: item.pais_origem,
-      ipi: item.ipi ?? 0,
-      st: item.st ?? 0,
-      validade: item.validade,
-      cas: item.cas ?? null,
-      insumo_id: null,
-    })),
-  )
-
-  if (error) throw new Error(error.message)
-
-  await supabase
-    .from('cotacoes')
-    .update({ status: 'processado' })
-    .eq('id', cotacaoId)
-    .eq('status', 'processando')
-
-  revalidatePath(`/cotacoes/${cotacaoId}`)
-  return { count: itens.length }
-}
-
-// Roda o OCR sequencialmente em várias cotações selecionadas na listagem — uma
-// por vez, para não estourar o circuit breaker de rate limit da Edge Function.
-export async function extrairEmLote(
-  cotacaoIds: string[],
-): Promise<{ id: string; ok: boolean; count?: number; erro?: string }[]> {
-  const resultados: { id: string; ok: boolean; count?: number; erro?: string }[] = []
-
-  for (const id of cotacaoIds) {
-    try {
-      const { count } = await extrairComOCR(id)
-      resultados.push({ id, ok: true, count })
-    } catch (err) {
-      resultados.push({ id, ok: false, erro: (err as Error).message })
-    }
+  if (EXTENSOES_EXCEL.includes(ext)) {
+    const itens = extrairItensExcel(await (await fetch(signedUrl)).arrayBuffer())
+    return { modo: 'concluido', count: await gravarItens(cotacaoId, itens) }
   }
 
-  revalidatePath('/cotacoes')
-  return resultados
+  return { modo: 'ocr', signedUrl, arquivoNome }
 }
 
-export async function uploadEExtrair(cotacaoId: string, formData: FormData): Promise<{ count: number }> {
+// Sobe um arquivo novo para a cotação e prepara a extração dele.
+export async function uploadArquivo(cotacaoId: string, formData: FormData): Promise<PreparoExtracao> {
   const supabase = await createClient()
 
   const arquivo = formData.get('arquivo') as File | null
@@ -286,42 +317,26 @@ export async function uploadEExtrair(cotacaoId: string, formData: FormData): Pro
     .update({ arquivo_url: path, arquivo_nome: arquivo.name })
     .eq('id', cotacaoId)
 
-  let itens: ItemExtraido[]
   if (isExcel) {
-    itens = extrairItensExcel(await arquivo.arrayBuffer())
-  } else {
-    const signedUrl = await getArquivoSignedUrl(supabase, path)
-    if (!signedUrl) throw new Error('Não foi possível acessar o arquivo enviado.')
-    itens = await extrairItensOCR(signedUrl, arquivo.name)
+    const itens = extrairItensExcel(await arquivo.arrayBuffer())
+    return { modo: 'concluido', count: await gravarItens(cotacaoId, itens) }
   }
 
-  const { error } = await supabase.from('cotacao_itens').insert(
-    itens.map((item) => ({
-      cotacao_id: cotacaoId,
-      descricao_original: item.descricao,
-      preco_unitario: item.preco_unitario,
-      quantidade_minima: item.quantidade_embalagem,
-      quantidade: item.quantidade,
-      unidade: normalizarUnidade(item.unidade),
-      pais_origem: item.pais_origem,
-      ipi: item.ipi ?? 0,
-      st: item.st ?? 0,
-      validade: item.validade,
-      cas: item.cas ?? null,
-      insumo_id: null,
-    })),
-  )
+  const signedUrl = await getArquivoSignedUrl(supabase, path)
+  if (!signedUrl) throw new Error('Não foi possível acessar o arquivo enviado.')
 
-  if (error) throw new Error(error.message)
+  return { modo: 'ocr', signedUrl, arquivoNome: arquivo.name }
+}
 
-  await supabase
-    .from('cotacoes')
-    .update({ status: 'processado' })
-    .eq('id', cotacaoId)
-    .eq('status', 'processando')
+// Grava os itens que o navegador obteve da Edge Function de OCR.
+export async function salvarItensExtraidos(
+  cotacaoId: string,
+  itens: unknown,
+): Promise<{ count: number }> {
+  const validos = sanitizarItens(itens)
+  if (validos.length === 0) throw new Error('Nenhum item com preço válido foi encontrado no arquivo.')
 
-  revalidatePath(`/cotacoes/${cotacaoId}`)
-  return { count: itens.length }
+  return { count: await gravarItens(cotacaoId, validos) }
 }
 
 export async function lancarPrecos(payload: {
