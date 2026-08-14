@@ -1,7 +1,7 @@
 'use client'
 
 import { useRef, useState, useTransition } from 'react'
-import { Sparkles, CheckCircle, AlertCircle, Loader2 } from 'lucide-react'
+import { Sparkles, CheckCircle, AlertCircle, Loader2, Paperclip } from 'lucide-react'
 import { extrairComOCR, uploadEExtrair } from '@/app/(dashboard)/cotacoes/actions'
 
 interface Props {
@@ -51,6 +51,10 @@ export function OcrButton({ cotacaoId, temArquivo }: Props) {
     } else {
       fileInputRef.current?.click()
     }
+  }
+
+  function handleAnexarNovo() {
+    fileInputRef.current?.click()
   }
 
   function handleReextrair() {
@@ -120,6 +124,17 @@ export function OcrButton({ cotacaoId, temArquivo }: Props) {
         {pending ? <Loader2 size={15} className="animate-spin" /> : <Sparkles size={15} />}
         {pending ? (status || 'Processando...') : 'Extrair com IA'}
       </button>
+
+      {temArquivo && !pending && (
+        <button
+          onClick={handleAnexarNovo}
+          title="Anexar outro arquivo a esta cotação"
+          className="inline-flex items-center gap-2 px-3 py-2 text-violet-700 border border-violet-300 bg-violet-50 text-sm font-medium rounded-lg hover:bg-violet-100 transition-colors"
+        >
+          <Paperclip size={14} />
+          Anexar outro arquivo
+        </button>
+      )}
 
       {result && (
         <span className={`inline-flex items-center gap-1.5 text-sm ${result.ok ? 'text-emerald-700' : 'text-red-600'}`}>
