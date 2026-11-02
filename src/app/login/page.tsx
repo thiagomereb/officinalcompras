@@ -10,27 +10,14 @@ export default async function LoginPage({
   const { error } = await searchParams
 
   return (
-    <div className="grid min-h-dvh lg:grid-cols-[1.1fr_1fr]">
-      <section className="flex flex-col justify-between border-b border-linha px-6 py-8 lg:border-b-0 lg:border-r lg:px-14 lg:py-12">
-        <Marca grande />
-        <div className="mt-10 max-w-xl lg:mt-0">
-          <p className="titulo text-[28px] leading-[1.15] lg:text-[40px]">
-            Cotações de insumos, comparadas por grama.
-          </p>
-          <p className="mt-4 max-w-md text-[15px] text-ardosia">
-            Lance as tabelas dos fornecedores, vincule cada item ao insumo certo e aprove o mapa com a
-            melhor oferta.
-          </p>
+    <div className="flex min-h-dvh items-center justify-center px-4 py-12">
+      <div className="w-full max-w-[360px]">
+        <div className="mb-6 flex justify-center">
+          <Marca />
         </div>
-        <p className="mt-10 hidden text-[12px] text-ardosia-2 lg:block">Uso interno da farmácia.</p>
-      </section>
 
-      <section className="flex items-center justify-center bg-papel px-6 py-12">
-        <form action={login} className="w-full max-w-[340px] space-y-5">
-          <div>
-            <h1 className="titulo text-[22px]">Entrar</h1>
-            <p className="mt-1 text-[13.5px] text-ardosia">Use o e-mail e a senha da sua conta.</p>
-          </div>
+        <form action={login} className="painel space-y-5 p-6">
+          <h1 className="titulo text-[18px]">Entrar</h1>
 
           {error && (
             <p className="aviso aviso-erro" role="alert">
@@ -62,7 +49,7 @@ export default async function LoginPage({
             Entrar
           </BotaoEnviar>
         </form>
-      </section>
+      </div>
     </div>
   )
 }

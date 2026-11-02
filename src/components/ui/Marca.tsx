@@ -15,15 +15,13 @@ export function Frasco({ className }: { className?: string }) {
   )
 }
 
-export function Marca({ grande = false }: { grande?: boolean }) {
+export function Marca() {
   return (
     <span className="inline-flex items-center gap-2.5">
-      <Frasco className={grande ? 'h-11 w-9' : 'h-6 w-5'} />
+      <Frasco className="h-6 w-5" />
       <span className="leading-none">
-        <span className={`titulo block ${grande ? 'text-[34px]' : 'text-[16px]'}`}>Officinal</span>
-        <span className={`rotulo block text-ambar-tinta ${grande ? 'mt-2 text-[11px]' : 'mt-1 text-[9.5px]'}`}>
-          Compras
-        </span>
+        <span className="titulo block text-[16px]">Officinal</span>
+        <span className="rotulo mt-1 block text-[9.5px] text-ambar-tinta">Compras</span>
       </span>
     </span>
   )

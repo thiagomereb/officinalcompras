@@ -59,7 +59,7 @@ export default async function ImprimirMapaPage({ params }: { params: Promise<{ i
             <div className="text-right">
               {/* No documento que vai para assinatura, a aprovação aparece como carimbo */}
               <span
-                className={`inline-block rounded border-[3px] border-double px-3 py-1.5 text-[13px] font-bold uppercase tracking-[0.14em] [font-variation-settings:'wdth'_125] ${
+                className={`inline-block rounded border-[3px] border-double px-3 py-1.5 text-[13px] font-bold uppercase tracking-[0.06em] ${
                   aprovado ? 'border-salvia text-salvia' : 'border-ardosia-2 text-ardosia'
                 }`}
               >

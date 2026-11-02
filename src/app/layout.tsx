@@ -2,13 +2,11 @@ import type { Metadata } from 'next'
 import { Archivo, IBM_Plex_Mono } from 'next/font/google'
 import './globals.css'
 
-// Archivo com o eixo de largura: expandido nos títulos e rótulos (ver .titulo
-// e .rotulo em globals.css), normal no corpo. Plex Mono só para números lidos
-// como medida — preço por grama, CAS, lote.
+// Archivo para o texto; Plex Mono só para números lidos como medida —
+// preço por grama, CAS, lote.
 const archivo = Archivo({
   variable: '--font-archivo',
   subsets: ['latin'],
-  axes: ['wdth'],
   display: 'swap',
 })
 
@@ -21,7 +19,7 @@ const plexMono = IBM_Plex_Mono({
 
 export const metadata: Metadata = {
   title: 'Officinal Compras',
-  description: 'Cotações de insumos da farmácia, comparadas por grama.',
+  description: 'Sistema interno de cotações e compras de insumos.',
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
