@@ -4,3 +4,9 @@
   # funções. Fixado aqui porque o arquivo tem prioridade sobre o painel: com a
   # raiz do repositório como publish, o site servia os arquivos-fonte e dava 404.
   publish = ".next"
+
+# O Netlify costuma ativar este runtime sozinho em projetos Next, mas neste site
+# não ativou: o build publicava .next como estático, sem funções, e toda rota
+# dava 404. Declarado aqui (e fixado no package.json) para não depender disso.
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
