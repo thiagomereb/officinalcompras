@@ -1,23 +1,21 @@
 import Link from 'next/link'
+import { Plus, FileText } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { getArquivosSignedUrls } from '@/lib/supabase/storage'
-import { buscarTodos } from '@/lib/supabase/consultas'
-import { Plus } from 'lucide-react'
 import { LancarPrecosModal } from '@/components/cotacoes/LancarPrecosModal'
 import { CotacoesTable, type CotacaoRow } from '@/components/cotacoes/CotacoesTable'
+import { Cabecalho } from '@/components/ui/Cabecalho'
+import { Vazio } from '@/components/ui/Vazio'
 
 export default async function CotacoesPage() {
   const supabase = await createClient()
 
-  const [{ data: cotacoes }, { data: fornecedores }, insumos] = await Promise.all([
+  const [{ data: cotacoes }, { data: fornecedores }] = await Promise.all([
     supabase
       .from('cotacoes')
       .select('*, fornecedores(razao_social, nome_fantasia), cotacao_itens(id)')
       .order('data_cotacao', { ascending: false }),
     supabase.from('fornecedores').select('id, razao_social, nome_fantasia').eq('ativo', true).order('razao_social'),
-    buscarTodos((de, ate) =>
-      supabase.from('insumos').select('id, nome_padrao, unidade_padrao').order('nome_padrao').order('id').range(de, ate),
-    ),
   ])
 
   const signedUrls = await getArquivosSignedUrls(
@@ -43,32 +41,33 @@ export default async function CotacoesPage() {
   })
 
   return (
-    <div className="p-8">
-      <div className="flex items-center justify-between mb-8">
-        <div>
-          <h2 className="text-2xl font-bold text-gray-900">Cotações</h2>
-          <p className="text-gray-500 mt-1">{rows.length} cotação(ões) registrada(s)</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <LancarPrecosModal
-            fornecedores={fornecedores ?? []}
-            insumos={insumos}
-          />
-          <Link
-            href="/cotacoes/nova"
-            className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
-          >
-            <Plus size={16} />
-            Nova cotação
-          </Link>
-        </div>
-      </div>
+    <div className="pagina">
+      <Cabecalho
+        grupo="Compras"
+        titulo="Cotações"
+        descricao={`${rows.length.toLocaleString('pt-BR')} cotação(ões) registrada(s)`}
+        acoes={
+          <>
+            <LancarPrecosModal fornecedores={fornecedores ?? []} />
+            <Link href="/cotacoes/nova" className="btn btn-primario">
+              <Plus size={16} />
+              Nova cotação
+            </Link>
+          </>
+        }
+      />
 
       {!rows.length ? (
-        <div className="text-center py-16 bg-white rounded-xl border border-gray-200">
-          <p className="text-gray-500 font-medium">Nenhuma cotação registrada</p>
-          <p className="text-gray-400 text-sm mt-1">Clique em &ldquo;Nova cotação&rdquo; para começar</p>
-        </div>
+        <Vazio
+          icone={FileText}
+          titulo="Nenhuma cotação registrada"
+          texto="Registre a tabela de preços de um fornecedor para começar a comparar."
+          acao={
+            <Link href="/cotacoes/nova" className="btn btn-primario btn-sm">
+              Nova cotação
+            </Link>
+          }
+        />
       ) : (
         <CotacoesTable cotacoes={rows} />
       )}

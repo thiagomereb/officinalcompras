@@ -1,69 +1,83 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useEffect, useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { X, Plus, Trash2, ClipboardList } from 'lucide-react'
 import { lancarPrecos } from '@/app/(dashboard)/cotacoes/actions'
 import { ehFalha } from '@/lib/acoes'
+import { BuscaInsumo } from '@/components/ui/BuscaInsumo'
 
 type Fornecedor = { id: string; razao_social: string; nome_fantasia: string | null }
-type Insumo = { id: string; nome_padrao: string; unidade_padrao: string }
 
 interface ItemRow {
+  // Chave estável: com o índice, remover uma linha trocaria o texto da busca das outras
+  chave: number
   insumo_id: string
   preco_unitario: string
   quantidade_embalagem: string
   unidade: string
 }
 
-const EMPTY_ROW: ItemRow = { insumo_id: '', preco_unitario: '', quantidade_embalagem: '', unidade: '' }
+const linhaVazia = (chave: number): ItemRow => ({
+  chave,
+  insumo_id: '',
+  preco_unitario: '',
+  quantidade_embalagem: '',
+  unidade: '',
+})
 
-export function LancarPrecosModal({
-  fornecedores,
-  insumos,
-}: {
-  fornecedores: Fornecedor[]
-  insumos: Insumo[]
-}) {
+// Data local (toISOString seria UTC: depois das 21h já marcaria amanhã)
+function hojeISO() {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+export function LancarPrecosModal({ fornecedores }: { fornecedores: Fornecedor[] }) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [fornecedorId, setFornecedorId] = useState('')
-  const [dataCotacao, setDataCotacao] = useState(new Date().toISOString().split('T')[0])
+  const [dataCotacao, setDataCotacao] = useState(hojeISO)
   const [validadeCotacao, setValidadeCotacao] = useState('')
   const [prazoEntrega, setPrazoEntrega] = useState('')
   const [prazoPagamento, setPrazoPagamento] = useState('')
-  const [items, setItems] = useState<ItemRow[]>([{ ...EMPTY_ROW }])
+  const [items, setItems] = useState<ItemRow[]>([linhaVazia(0)])
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
+  const dialogo = useRef<HTMLDivElement>(null)
+  const proximaChave = useRef(1)
+
+  // Ao abrir, o foco entra no diálogo (Esc e Tab passam a agir nele)
+  useEffect(() => {
+    if (open) dialogo.current?.focus()
+  }, [open])
 
   function addRow() {
-    setItems((prev) => [...prev, { ...EMPTY_ROW }])
+    setItems((prev) => [...prev, linhaVazia(proximaChave.current++)])
   }
 
-  function removeRow(i: number) {
-    setItems((prev) => prev.filter((_, idx) => idx !== i))
+  function removeRow(chave: number) {
+    setItems((prev) => prev.filter((row) => row.chave !== chave))
   }
 
-  function updateRow(i: number, field: keyof ItemRow, value: string) {
-    setItems((prev) => prev.map((row, idx) => (idx === i ? { ...row, [field]: value } : row)))
+  function updateRow(chave: number, campo: 'preco_unitario' | 'quantidade_embalagem' | 'unidade', value: string) {
+    setItems((prev) => prev.map((row) => (row.chave === chave ? { ...row, [campo]: value } : row)))
   }
 
-  function handleInsumoChange(i: number, insumoId: string) {
-    const insumo = insumos.find((ins) => ins.id === insumoId)
+  function handleInsumo(chave: number, insumoId: string, unidadePadrao: string | null) {
     setItems((prev) =>
-      prev.map((row, idx) =>
-        idx === i ? { ...row, insumo_id: insumoId, unidade: insumo?.unidade_padrao ?? row.unidade } : row,
+      prev.map((row) =>
+        row.chave === chave ? { ...row, insumo_id: insumoId, unidade: unidadePadrao ?? row.unidade } : row,
       ),
     )
   }
 
   function resetForm() {
     setFornecedorId('')
-    setDataCotacao(new Date().toISOString().split('T')[0])
+    setDataCotacao(hojeISO())
     setValidadeCotacao('')
     setPrazoEntrega('')
     setPrazoPagamento('')
-    setItems([{ ...EMPTY_ROW }])
+    setItems([linhaVazia(proximaChave.current++)])
     setError(null)
   }
 
@@ -116,56 +130,60 @@ export function LancarPrecosModal({
 
   return (
     <>
-      <button
-        onClick={() => setOpen(true)}
-        className="inline-flex items-center gap-2 px-4 py-2.5 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700 transition-colors"
-      >
+      <button onClick={() => setOpen(true)} className="btn btn-secundario">
         <ClipboardList size={16} />
-        Lançar Preços
+        Lançar preços
       </button>
 
       {open && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4">
-          {/* Backdrop */}
-          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={handleClose} />
+        <div className="fixed inset-0 z-50 flex items-end justify-center p-0 sm:items-center sm:p-4">
+          <div className="absolute inset-0 bg-grafite/40" onClick={() => !pending && handleClose()} aria-hidden="true" />
 
-          {/* Modal */}
-          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[92vh] flex flex-col">
-            {/* Header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 shrink-0">
+          <div
+            ref={dialogo}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="titulo-lancar-precos"
+            tabIndex={-1}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape' && !pending) handleClose()
+            }}
+            className="relative flex max-h-[92dvh] w-full max-w-3xl flex-col rounded-t-2xl bg-papel shadow-2xl shadow-grafite/20 outline-none sm:rounded-2xl"
+          >
+            <div className="flex items-start justify-between gap-4 border-b border-linha-2 px-6 py-4">
               <div>
-                <h2 className="font-semibold text-gray-900 text-base">Lançar Preços</h2>
-                <p className="text-xs text-gray-500 mt-0.5">Cria uma nova cotação com os itens informados</p>
+                <h2 id="titulo-lancar-precos" className="titulo text-[18px]">
+                  Lançar preços
+                </h2>
+                <p className="mt-0.5 text-[12.5px] text-ardosia">
+                  Cria uma cotação já com os itens, sem arquivo — para preços passados por telefone ou e-mail.
+                </p>
               </div>
-              <button
-                onClick={handleClose}
-                className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
-              >
-                <X size={18} />
+              <button onClick={handleClose} className="btn btn-fantasma btn-icone btn-sm" aria-label="Fechar">
+                <X size={16} />
               </button>
             </div>
 
-            {/* Body */}
-            <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto">
-              <div className="px-6 py-5 space-y-5">
+            <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+              <div className="flex-1 space-y-6 overflow-y-auto px-6 py-5">
                 {error && (
-                  <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-2.5 rounded-lg text-sm">
+                  <p className="aviso aviso-erro" role="alert">
                     {error}
-                  </div>
+                  </p>
                 )}
 
-                {/* Fornecedor + Datas */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div className="sm:col-span-2">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Fornecedor <span className="text-red-500">*</span>
+                    <label htmlFor="lp-fornecedor" className="legenda">
+                      Fornecedor <span className="obrigatorio">*</span>
                     </label>
                     <select
+                      id="lp-fornecedor"
                       value={fornecedorId}
                       onChange={(e) => setFornecedorId(e.target.value)}
-                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="campo"
                     >
-                      <option value="">Selecione o fornecedor...</option>
+                      <option value="">Selecione o fornecedor</option>
                       {fornecedores.map((f) => (
                         <option key={f.id} value={f.id}>
                           {f.nome_fantasia ?? f.razao_social}
@@ -175,160 +193,106 @@ export function LancarPrecosModal({
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Data da Cotação</label>
-                    <input
-                      type="date"
-                      value={dataCotacao}
-                      onChange={(e) => setDataCotacao(e.target.value)}
-                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
+                    <label htmlFor="lp-data" className="legenda">Data da cotação</label>
+                    <input id="lp-data" type="date" value={dataCotacao} onChange={(e) => setDataCotacao(e.target.value)} className="campo" />
                   </div>
-
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Validade da Cotação</label>
-                    <input
-                      type="date"
-                      value={validadeCotacao}
-                      onChange={(e) => setValidadeCotacao(e.target.value)}
-                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
+                    <label htmlFor="lp-validade" className="legenda">Validade da cotação</label>
+                    <input id="lp-validade" type="date" value={validadeCotacao} onChange={(e) => setValidadeCotacao(e.target.value)} className="campo" />
                   </div>
-
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Prazo de Entrega (dias)</label>
-                    <input
-                      type="number"
-                      min="0"
-                      placeholder="Ex: 7"
-                      value={prazoEntrega}
-                      onChange={(e) => setPrazoEntrega(e.target.value)}
-                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
+                    <label htmlFor="lp-entrega" className="legenda">Prazo de entrega (dias)</label>
+                    <input id="lp-entrega" type="number" min="0" step="1" placeholder="7" value={prazoEntrega} onChange={(e) => setPrazoEntrega(e.target.value)} className="campo" />
                   </div>
-
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Prazo de Pagamento (dias)</label>
-                    <input
-                      type="number"
-                      min="0"
-                      placeholder="Ex: 30"
-                      value={prazoPagamento}
-                      onChange={(e) => setPrazoPagamento(e.target.value)}
-                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
+                    <label htmlFor="lp-pagamento" className="legenda">Prazo de pagamento (dias)</label>
+                    <input id="lp-pagamento" type="number" min="0" step="1" placeholder="30" value={prazoPagamento} onChange={(e) => setPrazoPagamento(e.target.value)} className="campo" />
                   </div>
                 </div>
 
-                {/* Divider */}
-                <div className="border-t border-gray-100" />
-
-                {/* Items */}
                 <div>
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="text-sm font-medium text-gray-700">
-                      Insumos
-                      {validItems.length > 0 && (
-                        <span className="ml-2 text-xs font-normal text-gray-400">
-                          {validItems.length} item(s) válido(s)
-                        </span>
-                      )}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={addRow}
-                      className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 font-medium"
-                    >
-                      <Plus size={12} />
-                      Adicionar linha
-                    </button>
+                  <div className="mb-2 flex items-baseline justify-between">
+                    <p className="rotulo">Itens</p>
+                    <span className="text-[12px] text-ardosia">{validItems.length} com insumo e preço</span>
                   </div>
 
-                  {/* Column headers */}
-                  <div className="grid grid-cols-[1fr_130px_110px_90px_36px] gap-2 px-1 mb-1.5">
-                    <span className="text-xs font-medium text-gray-400">Insumo</span>
-                    <span className="text-xs font-medium text-gray-400">Preço Unit. (R$)</span>
-                    <span className="text-xs font-medium text-gray-400">Qtd/Embalagem</span>
-                    <span className="text-xs font-medium text-gray-400">Unidade</span>
+                  <div className="hidden grid-cols-[1fr_118px_100px_76px_32px] gap-2 px-0.5 pb-1.5 text-[11.5px] text-ardosia sm:grid">
+                    <span>Insumo</span>
+                    <span>Preço (R$)</span>
+                    <span>Embalagem</span>
+                    <span>Unidade</span>
                     <span />
                   </div>
 
                   <div className="space-y-2">
-                    {items.map((item, i) => (
-                      <div key={i} className="grid grid-cols-[1fr_130px_110px_90px_36px] gap-2 items-center">
-                        <select
-                          value={item.insumo_id}
-                          onChange={(e) => handleInsumoChange(i, e.target.value)}
-                          className="rounded-lg border border-gray-300 px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 truncate"
-                        >
-                          <option value="">Selecione...</option>
-                          {insumos.map((ins) => (
-                            <option key={ins.id} value={ins.id}>
-                              {ins.nome_padrao}
-                            </option>
-                          ))}
-                        </select>
-
+                    {items.map((item) => (
+                      <div
+                        key={item.chave}
+                        className="grid grid-cols-[1fr_1fr_1fr_32px] gap-2 border-b border-linha-2 pb-2 sm:grid-cols-[1fr_118px_100px_76px_32px] sm:border-0 sm:pb-0"
+                      >
+                        <div className="col-span-4 sm:col-span-1">
+                          <BuscaInsumo
+                            compacto
+                            onSelecionar={(insumo) => handleInsumo(item.chave, insumo.id, insumo.unidade_padrao)}
+                          />
+                        </div>
                         <input
                           type="number"
                           step="0.0001"
                           min="0"
-                          placeholder="0,0000"
+                          placeholder="0,00"
+                          aria-label="Preço unitário"
                           value={item.preco_unitario}
-                          onChange={(e) => updateRow(i, 'preco_unitario', e.target.value)}
-                          className="rounded-lg border border-gray-300 px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
+                          onChange={(e) => updateRow(item.chave, 'preco_unitario', e.target.value)}
+                          className="campo campo-sm leitura"
                         />
-
                         <input
                           type="number"
                           step="0.01"
                           min="0"
-                          placeholder="Ex: 100"
+                          placeholder="100"
+                          aria-label="Quantidade da embalagem"
                           value={item.quantidade_embalagem}
-                          onChange={(e) => updateRow(i, 'quantidade_embalagem', e.target.value)}
-                          className="rounded-lg border border-gray-300 px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          onChange={(e) => updateRow(item.chave, 'quantidade_embalagem', e.target.value)}
+                          className="campo campo-sm"
                         />
-
                         <input
                           type="text"
-                          placeholder="g, mL"
+                          placeholder="g"
+                          aria-label="Unidade"
                           value={item.unidade}
-                          onChange={(e) => updateRow(i, 'unidade', e.target.value)}
-                          className="rounded-lg border border-gray-300 px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          onChange={(e) => updateRow(item.chave, 'unidade', e.target.value)}
+                          className="campo campo-sm"
                         />
-
                         <button
                           type="button"
-                          onClick={() => removeRow(i)}
+                          onClick={() => removeRow(item.chave)}
                           disabled={items.length === 1}
-                          className="w-9 h-9 flex items-center justify-center rounded-lg text-gray-300 hover:text-red-500 hover:bg-red-50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                          className="btn btn-fantasma btn-icone btn-sm self-center"
+                          aria-label="Remover linha"
                         >
-                          <Trash2 size={15} />
+                          <Trash2 size={14} />
                         </button>
                       </div>
                     ))}
                   </div>
+
+                  <button type="button" onClick={addRow} className="btn btn-fantasma btn-sm mt-2 -ml-2">
+                    <Plus size={14} />
+                    Adicionar linha
+                  </button>
                 </div>
               </div>
 
-              {/* Footer */}
-              <div className="px-6 py-4 border-t border-gray-100 flex items-center justify-between bg-gray-50 rounded-b-2xl shrink-0">
-                <p className="text-xs text-gray-400">
-                  Linhas sem insumo ou sem preço serão ignoradas
-                </p>
+              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-linha-2 bg-nevoa/60 px-6 py-3.5 sm:rounded-b-2xl">
+                <p className="text-[12px] text-ardosia">Linhas sem insumo ou sem preço não entram.</p>
                 <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={handleClose}
-                    className="px-4 py-2 text-sm text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-                  >
+                  <button type="button" onClick={handleClose} className="btn btn-secundario" disabled={pending}>
                     Cancelar
                   </button>
-                  <button
-                    type="submit"
-                    disabled={pending}
-                    className="px-5 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
-                  >
-                    {pending ? 'Salvando...' : 'Salvar cotação'}
+                  <button type="submit" disabled={pending} className="btn btn-primario">
+                    {pending && <span className="girador" aria-hidden="true" />}
+                    {pending ? 'Salvando…' : 'Salvar cotação'}
                   </button>
                 </div>
               </div>

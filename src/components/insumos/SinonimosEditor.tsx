@@ -33,47 +33,43 @@ export function SinonimosEditor({ inicial = [] }: Props) {
     <div>
       <input type="hidden" name="sinonimos" value={JSON.stringify(sinonimos)} />
 
-      <div className="flex gap-2 mb-3">
+      <div className="flex gap-2">
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Ex: Vitamina C, Ácido L-Ascórbico..."
-          className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          placeholder="Vitamina C, Ácido L-Ascórbico…"
+          aria-label="Novo sinônimo"
+          className="campo flex-1"
         />
-        <button
-          type="button"
-          onClick={adicionar}
-          className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-blue-600 border border-blue-200 rounded-lg hover:bg-blue-50 transition-colors"
-        >
+        <button type="button" onClick={adicionar} className="btn btn-secundario">
           <Plus size={15} />
           Adicionar
         </button>
       </div>
 
-      {sinonimos.length > 0 && (
-        <div className="flex flex-wrap gap-2">
+      {sinonimos.length > 0 ? (
+        <ul className="mt-3 flex flex-wrap gap-1.5">
           {sinonimos.map((s, i) => (
-            <span
-              key={i}
-              className="inline-flex items-center gap-1.5 px-3 py-1 bg-blue-50 text-blue-700 text-sm rounded-full"
+            <li
+              key={s}
+              className="inline-flex h-7 items-center gap-1 rounded-md border border-linha bg-nevoa pl-2.5 pr-1 text-[13px]"
             >
               {s}
               <button
                 type="button"
                 onClick={() => remover(i)}
-                className="hover:text-blue-900 transition-colors"
+                className="grid h-5 w-5 place-items-center rounded text-ardosia transition-colors hover:bg-nevoa-2 hover:text-oxido"
+                aria-label={`Remover sinônimo ${s}`}
               >
-                <X size={13} />
+                <X size={12} />
               </button>
-            </span>
+            </li>
           ))}
-        </div>
-      )}
-
-      {sinonimos.length === 0 && (
-        <p className="text-xs text-gray-400">
-          Adicione sinônimos para que o sistema reconheça nomes alternativos deste insumo.
+        </ul>
+      ) : (
+        <p className="ajuda">
+          Nomes que aparecem nas tabelas dos fornecedores. Com eles, o sistema reconhece o insumo sozinho.
         </p>
       )}
     </div>

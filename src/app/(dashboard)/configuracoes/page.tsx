@@ -1,49 +1,39 @@
-import { Settings, Bell, Shield, Database, Sliders } from 'lucide-react'
+import { Cabecalho } from '@/components/ui/Cabecalho'
 
-const items = [
-  { icon: Sliders, title: 'Pesos padrão do algoritmo', desc: 'Ajuste os pesos usados ao criar novos mapas de cotação.' },
-  { icon: Bell, title: 'Notificações', desc: 'Alertas de vencimento de cotações e insumos críticos.' },
-  { icon: Shield, title: 'Usuários e permissões', desc: 'Gerencie acessos e funções dos colaboradores.' },
-  { icon: Database, title: 'Exportação de dados', desc: 'Backup e exportação em CSV/Excel.' },
+const PLANEJADO = [
+  {
+    titulo: 'Pesos padrão dos mapas',
+    desc: 'Hoje os pesos são escolhidos em cada mapa novo, a partir de 50 / 20 / 20 / 10.',
+  },
+  { titulo: 'Avisos de vencimento', desc: 'Lembrete quando uma cotação estiver perto de vencer.' },
+  { titulo: 'Usuários e acessos', desc: 'Contas da equipe de compras. Hoje são criadas pelo painel do Supabase.' },
+  { titulo: 'Exportação de dados', desc: 'Cotações e mapas em planilha.' },
 ]
 
 export default function ConfiguracoesPage() {
   return (
-    <div className="p-8 space-y-8">
-      <div>
-        <h2 className="text-2xl font-bold text-gray-900">Configurações</h2>
-        <p className="text-gray-500 mt-1">Preferências e ajustes do sistema</p>
-      </div>
+    <div className="pagina">
+      <Cabecalho grupo="Sistema" titulo="Configurações" />
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-3xl">
-        {items.map(({ icon: Icon, title, desc }) => (
-          <div key={title} className="bg-white rounded-xl border border-gray-200 p-5 flex items-start gap-4 opacity-60">
-            <div className="w-9 h-9 rounded-lg bg-slate-100 flex items-center justify-center shrink-0">
-              <Icon size={17} className="text-slate-500" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2 mb-1">
-                <p className="font-medium text-gray-900 text-sm">{title}</p>
-                <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-slate-100 text-slate-500">Em breve</span>
-              </div>
-              <p className="text-xs text-gray-500">{desc}</p>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      <div className="bg-blue-50 border border-blue-100 rounded-xl p-5 max-w-3xl">
-        <div className="flex items-start gap-3">
-          <Settings size={18} className="text-blue-500 mt-0.5 shrink-0" />
+      <section className="painel max-w-3xl">
+        <div className="painel-topo">
           <div>
-            <p className="text-sm font-medium text-blue-800">Módulo em desenvolvimento</p>
-            <p className="text-xs text-blue-600 mt-0.5">
-              As configurações avançadas estarão disponíveis em breve. Os pesos do algoritmo podem ser
-              ajustados individualmente em cada Mapa de Cotação.
-            </p>
+            <h2 className="painel-titulo">Ainda não configurável</h2>
+            <p className="text-[12.5px] text-ardosia">Estes ajustes estão planejados. Enquanto isso, funcionam assim:</p>
           </div>
         </div>
-      </div>
+        <ul>
+          {PLANEJADO.map(({ titulo, desc }) => (
+            <li key={titulo} className="flex items-start justify-between gap-4 border-b border-linha-2 px-5 py-3.5 last:border-0">
+              <span>
+                <span className="block text-[13.5px] font-medium">{titulo}</span>
+                <span className="block text-[12.5px] text-ardosia">{desc}</span>
+              </span>
+              <span className="selo shrink-0">planejado</span>
+            </li>
+          ))}
+        </ul>
+      </section>
     </div>
   )
 }

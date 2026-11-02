@@ -19,9 +19,9 @@ export function LimparItensButton({ cotacaoId, totalItens, action }: Props) {
 
   if (erro) {
     return (
-      <span className="inline-flex items-center gap-2 px-3 py-2 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
-        {erro}
-        <button onClick={() => { setErro(null); setConfirmando(false) }} className="text-red-400 hover:text-red-600">
+      <span role="alert" className="aviso aviso-erro basis-full py-2">
+        <span className="flex-1">{erro}</span>
+        <button onClick={() => { setErro(null); setConfirmando(false) }} className="font-medium underline-offset-2 hover:underline">
           Fechar
         </button>
       </span>
@@ -30,10 +30,7 @@ export function LimparItensButton({ cotacaoId, totalItens, action }: Props) {
 
   if (!confirmando) {
     return (
-      <button
-        onClick={() => setConfirmando(true)}
-        className="inline-flex items-center gap-2 px-3 py-2 text-sm text-red-600 border border-red-200 rounded-lg hover:bg-red-50 transition-colors"
-      >
+      <button onClick={() => setConfirmando(true)} className="btn btn-fantasma btn-sm hover:text-oxido">
         <Trash2 size={14} />
         Limpar itens
       </button>
@@ -41,8 +38,8 @@ export function LimparItensButton({ cotacaoId, totalItens, action }: Props) {
   }
 
   return (
-    <div className="inline-flex items-center gap-2 px-3 py-2 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
-      <span>Remover todos os {totalItens} itens?</span>
+    <div className="inline-flex h-[30px] items-center gap-3 rounded-[7px] border border-oxido/30 bg-oxido-veu px-3 text-[12.5px] text-oxido">
+      <span>Remover os {totalItens} itens?</span>
       <button
         disabled={pending}
         onClick={async () => {
@@ -52,13 +49,14 @@ export function LimparItensButton({ cotacaoId, totalItens, action }: Props) {
           if (resultado?.erro) setErro(resultado.erro)
           else setConfirmando(false)
         }}
-        className="font-semibold underline hover:no-underline disabled:opacity-50"
+        className="font-semibold underline underline-offset-2 hover:no-underline disabled:opacity-50"
       >
-        {pending ? 'Removendo...' : 'Confirmar'}
+        {pending ? 'Removendo…' : 'Remover'}
       </button>
       <button
         onClick={() => setConfirmando(false)}
-        className="text-red-400 hover:text-red-600"
+        disabled={pending}
+        className="text-ardosia hover:text-grafite"
       >
         Cancelar
       </button>

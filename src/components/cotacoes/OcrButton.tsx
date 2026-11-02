@@ -1,7 +1,7 @@
 'use client'
 
 import { useRef, useState, useTransition } from 'react'
-import { Sparkles, CheckCircle, AlertCircle, Loader2, Paperclip } from 'lucide-react'
+import { Sparkles, Check, AlertCircle, Paperclip } from 'lucide-react'
 import { prepararExtracao, anexarArquivo } from '@/app/(dashboard)/cotacoes/actions'
 import { concluirExtracao } from '@/lib/ocr-browser'
 import { enviarArquivoCotacao, ACCEPT_ARQUIVO_COTACAO } from '@/lib/supabase/upload'
@@ -81,7 +81,7 @@ export function OcrButton({ cotacaoId, temArquivo, totalItens }: Props) {
   }
 
   return (
-    <div className="flex items-center gap-3 flex-wrap">
+    <div className="flex flex-wrap items-center gap-2">
       <input
         ref={fileInputRef}
         type="file"
@@ -90,29 +90,28 @@ export function OcrButton({ cotacaoId, temArquivo, totalItens }: Props) {
         onChange={handleFileChange}
         disabled={pending}
       />
-      <button
-        onClick={handleExtrairClick}
-        disabled={pending}
-        className="inline-flex items-center gap-2 px-4 py-2 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
-      >
-        {pending ? <Loader2 size={15} className="animate-spin" /> : <Sparkles size={15} />}
-        {pending ? (status || 'Processando...') : 'Extrair com IA'}
-      </button>
-
       {temArquivo && !pending && (
         <button
           onClick={handleAnexarNovo}
-          title="Anexar outro arquivo a esta cotação"
-          className="inline-flex items-center gap-2 px-3 py-2 text-violet-700 border border-violet-300 bg-violet-50 text-sm font-medium rounded-lg hover:bg-violet-100 transition-colors"
+          title="Os itens do arquivo novo se somam aos que já existem"
+          className="btn btn-secundario btn-sm"
         >
           <Paperclip size={14} />
           Anexar outro arquivo
         </button>
       )}
 
+      <button onClick={handleExtrairClick} disabled={pending} className="btn btn-primario btn-sm">
+        {pending ? <span className="girador" aria-hidden="true" /> : <Sparkles size={14} />}
+        {pending ? (status || 'Processando…') : 'Extrair com IA'}
+      </button>
+
       {result && (
-        <span className={`inline-flex items-center gap-1.5 text-sm ${result.ok ? 'text-emerald-700' : 'text-red-600'}`}>
-          {result.ok ? <CheckCircle size={15} /> : <AlertCircle size={15} />}
+        <span
+          role="status"
+          className={`inline-flex basis-full items-center gap-1.5 text-[13px] sm:basis-auto ${result.ok ? 'text-salvia' : 'text-oxido'}`}
+        >
+          {result.ok ? <Check size={14} /> : <AlertCircle size={14} />}
           {result.msg}
         </span>
       )}

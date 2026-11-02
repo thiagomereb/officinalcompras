@@ -19,7 +19,7 @@ export function VincularItensButton({ cotacaoId, semVinculo, action }: Props) {
   return (
     <div className="inline-flex items-center gap-2">
       {resultado && (
-        <span className="text-xs text-green-700 bg-green-50 px-2 py-1 rounded border border-green-200">
+        <span role="status" className="text-[12.5px] text-ardosia">
           {resultado}
         </span>
       )}
@@ -38,10 +38,11 @@ export function VincularItensButton({ cotacaoId, semVinculo, action }: Props) {
           )
           setPending(false)
         }}
-        className="inline-flex items-center gap-2 px-3 py-2 text-sm text-indigo-600 border border-indigo-200 rounded-lg hover:bg-indigo-50 disabled:opacity-50 transition-colors"
+        className="btn btn-secundario btn-sm"
+        title="Liga cada item sem vínculo ao insumo de nome ou sinônimo mais parecido"
       >
-        <Link2 size={14} />
-        {pending ? 'Vinculando...' : `Vincular automaticamente (${semVinculo})`}
+        {pending ? <span className="girador" aria-hidden="true" /> : <Link2 size={14} />}
+        {pending ? 'Vinculando…' : `Vincular automaticamente (${semVinculo})`}
       </button>
     </div>
   )

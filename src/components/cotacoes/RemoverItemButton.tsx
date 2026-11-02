@@ -23,10 +23,11 @@ export function RemoverItemButton({ id, cotacaoId, action }: Props) {
         })
       }}
       disabled={pending}
-      className="p-1.5 text-gray-300 hover:text-red-500 disabled:opacity-40 transition-colors rounded"
+      className="btn btn-fantasma btn-icone btn-sm hover:text-oxido"
       title="Remover item"
+      aria-label="Remover item"
     >
-      <Trash2 size={14} />
+      {pending ? <span className="girador" aria-hidden="true" /> : <Trash2 size={14} />}
     </button>
   )
 }

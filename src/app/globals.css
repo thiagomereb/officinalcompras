@@ -1,30 +1,549 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/*
+ * Officinal Compras — sistema visual
+ *
+ * A mesa de compras de uma farmácia de manipulação: fundo de bancada (névoa),
+ * tinta grafite e um único acento âmbar — a cor do frasco que guarda o insumo.
+ * O âmbar marca sempre "o escolhido": a página ativa, a melhor oferta, o
+ * fornecedor selecionado. Não use âmbar para avisos; atenção e erro são óxido.
+ */
+@theme {
+  --color-grafite: #1c2226;
+  --color-grafite-2: #2d363b;
+  --color-ardosia: #5c656a;
+  --color-ardosia-2: #8a9397;
+  --color-nevoa: #eef0ee;
+  --color-nevoa-2: #e3e7e4;
+  --color-papel: #ffffff;
+  --color-linha: #dae0dc;
+  --color-linha-2: #e9ece9;
+  --color-ambar: #b26b12;
+  --color-ambar-tinta: #8a5409;
+  --color-ambar-veu: #f7ecdc;
+  --color-salvia: #2f6b52;
+  --color-salvia-veu: #e2eee7;
+  --color-oxido: #a63a2b;
+  --color-oxido-veu: #f7e4e0;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  --font-sans: var(--font-archivo), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-plex-mono), ui-monospace, "SFMono-Regular", monospace;
 }
 
 @layer base {
-  input, select, textarea, option {
-    color: #171717;
+  body {
+    background: var(--color-nevoa);
+    color: var(--color-grafite);
+    font-family: var(--font-sans);
+    font-size: 14px;
+    line-height: 1.5;
+  }
+
+  ::selection {
+    background: var(--color-ambar-veu);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-ambar);
+    outline-offset: 2px;
+  }
+
+  input,
+  select,
+  textarea,
+  option {
+    color: var(--color-grafite);
+  }
+
+  input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--color-grafite);
+    cursor: pointer;
+  }
+
+  input[type="checkbox"]:disabled {
+    cursor: not-allowed;
+  }
+}
+
+@layer components {
+  /* ── Tipografia ─────────────────────────────────────────────────────── */
+
+  /* Archivo expandido: a voz de rótulo de frasco e painel de instrumento */
+  .titulo {
+    font-variation-settings: "wdth" 118;
+    font-weight: 650;
+    letter-spacing: -0.012em;
+    color: var(--color-grafite);
+  }
+
+  .rotulo {
+    font-variation-settings: "wdth" 118;
+    font-size: 10.5px;
+    font-weight: 620;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--color-ardosia);
+  }
+
+  /* Números lidos como numa balança: mono, alinhados por casa decimal */
+  .leitura {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.01em;
+  }
+
+  .num {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ── Estrutura ──────────────────────────────────────────────────────── */
+
+  .pagina {
+    width: 100%;
+    max-width: 1360px;
+    padding: 20px 16px 48px;
+  }
+
+  @media (min-width: 1024px) {
+    .pagina {
+      padding: 32px 40px 64px;
+    }
+  }
+
+  .painel {
+    background: var(--color-papel);
+    border: 1px solid var(--color-linha);
+    border-radius: 12px;
+  }
+
+  .painel-topo {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--color-linha-2);
+  }
+
+  .painel-titulo {
+    font-size: 14px;
+    font-weight: 620;
+    color: var(--color-grafite);
+  }
+
+  /* ── Botões ─────────────────────────────────────────────────────────── */
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    height: 36px;
+    padding: 0 14px;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    font-size: 13.5px;
+    font-weight: 560;
+    line-height: 1;
+    white-space: nowrap;
+    cursor: pointer;
+    user-select: none;
+    transition:
+      background-color 120ms ease,
+      border-color 120ms ease,
+      color 120ms ease,
+      transform 60ms ease;
+  }
+
+  .btn:active:not(:disabled) {
+    transform: translateY(1px);
+  }
+
+  .btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .btn-primario {
+    background: var(--color-grafite);
+    color: #fff;
+  }
+
+  .btn-primario:hover:not(:disabled) {
+    background: var(--color-grafite-2);
+  }
+
+  .btn-secundario {
+    background: var(--color-papel);
+    border-color: var(--color-linha);
+    color: var(--color-grafite);
+  }
+
+  .btn-secundario:hover:not(:disabled) {
+    background: var(--color-nevoa);
+    border-color: #c8cfca;
+  }
+
+  .btn-fantasma {
+    background: transparent;
+    color: var(--color-ardosia);
+  }
+
+  .btn-fantasma:hover:not(:disabled) {
+    background: var(--color-nevoa-2);
+    color: var(--color-grafite);
+  }
+
+  .btn-perigo {
+    background: var(--color-papel);
+    border-color: color-mix(in srgb, var(--color-oxido) 30%, white);
+    color: var(--color-oxido);
+  }
+
+  .btn-perigo:hover:not(:disabled) {
+    background: var(--color-oxido-veu);
+  }
+
+  .btn-sm {
+    height: 30px;
+    gap: 6px;
+    padding: 0 10px;
+    border-radius: 7px;
+    font-size: 12.5px;
+  }
+
+  .btn-icone {
+    width: 36px;
+    padding: 0;
+  }
+
+  .btn-icone.btn-sm {
+    width: 30px;
+  }
+
+  /* ── Campos ─────────────────────────────────────────────────────────── */
+
+  .legenda {
+    display: block;
+    margin-bottom: 6px;
+    font-size: 12.5px;
+    font-weight: 560;
+    color: var(--color-grafite);
+  }
+
+  .legenda .obrigatorio {
+    color: var(--color-oxido);
+  }
+
+  .ajuda {
+    margin-top: 6px;
+    font-size: 12px;
+    color: var(--color-ardosia);
+  }
+
+  .campo {
+    display: block;
+    width: 100%;
+    height: 38px;
+    padding: 0 12px;
+    background: var(--color-papel);
+    border: 1px solid var(--color-linha);
+    border-radius: 8px;
+    font-size: 14px;
+    color: var(--color-grafite);
+    transition:
+      border-color 120ms ease,
+      box-shadow 120ms ease;
+  }
+
+  textarea.campo {
+    height: auto;
+    padding: 8px 12px;
+    resize: vertical;
+  }
+
+  select.campo {
+    appearance: none;
+    padding-right: 34px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' stroke='%235c656a' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m4.5 6.5 3.5 3.5 3.5-3.5'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+  }
+
+  .campo::placeholder {
+    color: var(--color-ardosia-2);
+  }
+
+  .campo:hover:not(:disabled) {
+    border-color: #c4ccc7;
+  }
+
+  .campo:focus {
+    outline: none;
+    border-color: var(--color-ambar);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-ambar) 18%, transparent);
+  }
+
+  .campo:disabled {
+    background: var(--color-nevoa);
+    color: var(--color-ardosia);
+  }
+
+  .campo-sm {
+    height: 32px;
+    padding: 0 10px;
+    font-size: 13px;
+  }
+
+  /* ── Tabelas ────────────────────────────────────────────────────────── */
+
+  .tabela {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    font-size: 13.5px;
+  }
+
+  .tabela th {
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--color-linha);
+    font-variation-settings: "wdth" 115;
+    font-size: 10.5px;
+    font-weight: 620;
+    letter-spacing: 0.08em;
+    text-align: left;
+    text-transform: uppercase;
+    white-space: nowrap;
+    color: var(--color-ardosia);
+  }
+
+  .tabela td {
+    padding: 11px 16px;
+    border-bottom: 1px solid var(--color-linha-2);
+    vertical-align: middle;
+  }
+
+  .tabela tbody tr:last-child td {
+    border-bottom: 0;
+  }
+
+  .tabela tbody tr {
+    transition: background-color 100ms ease;
+  }
+
+  .tabela tbody tr:hover {
+    background: #f6f7f6;
+  }
+
+  .tabela .num {
+    text-align: right;
+  }
+
+  .tabela-compacta th,
+  .tabela-compacta td {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+
+  .tabela-compacta td {
+    padding-top: 8px;
+    padding-bottom: 8px;
+  }
+
+  /* A marca âmbar: a linha escolhida ganha a aba do frasco na borda */
+  .tabela tbody tr.escolhido {
+    background: #fcf7f0;
+  }
+
+  .tabela tbody tr.escolhido td:first-child {
+    box-shadow: inset 3px 0 0 var(--color-ambar);
+  }
+
+  /* ── Selos (status) ─────────────────────────────────────────────────── */
+
+  .selo {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 22px;
+    padding: 0 8px;
+    border-radius: 6px;
+    background: var(--color-nevoa);
+    font-size: 11.5px;
+    font-weight: 560;
+    line-height: 1;
+    white-space: nowrap;
+    color: var(--color-ardosia);
+  }
+
+  .selo-ok {
+    background: var(--color-salvia-veu);
+    color: var(--color-salvia);
+  }
+
+  .selo-alerta {
+    background: var(--color-oxido-veu);
+    color: var(--color-oxido);
+  }
+
+  .selo-ambar {
+    background: var(--color-ambar-veu);
+    color: var(--color-ambar-tinta);
+  }
+
+  /* ── Avisos ─────────────────────────────────────────────────────────── */
+
+  .aviso {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 10px 14px;
+    border: 1px solid;
+    border-radius: 8px;
+    font-size: 13.5px;
+  }
+
+  .aviso-erro {
+    background: var(--color-oxido-veu);
+    border-color: color-mix(in srgb, var(--color-oxido) 22%, white);
+    color: #7c2b20;
+  }
+
+  .aviso-atencao {
+    background: var(--color-papel);
+    border-color: color-mix(in srgb, var(--color-oxido) 32%, white);
+    color: #7c2b20;
+  }
+
+  .aviso-ok {
+    background: var(--color-salvia-veu);
+    border-color: color-mix(in srgb, var(--color-salvia) 22%, white);
+    color: #24523e;
+  }
+
+  /* ── Navegação ──────────────────────────────────────────────────────── */
+
+  .item-nav {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    height: 34px;
+    padding: 0 10px;
+    border-radius: 8px;
+    font-size: 13.5px;
+    color: var(--color-ardosia);
+    transition:
+      background-color 120ms ease,
+      color 120ms ease;
+  }
+
+  .item-nav:hover {
+    background: var(--color-nevoa-2);
+    color: var(--color-grafite);
+  }
+
+  .item-nav[aria-current="page"] {
+    background: var(--color-papel);
+    color: var(--color-grafite);
+    font-weight: 580;
+    box-shadow: inset 0 0 0 1px var(--color-linha);
+  }
+
+  .item-nav[aria-current="page"]::before {
+    content: "";
+    position: absolute;
+    top: 8px;
+    bottom: 8px;
+    left: -12px;
+    width: 3px;
+    border-radius: 0 3px 3px 0;
+    background: var(--color-ambar);
+  }
+
+  /* Só aparece se a troca de página passar de ~150ms, para não piscar em
+     navegações rápidas */
+  .nav-pendente {
+    width: 12px;
+    height: 12px;
+    border: 1.5px solid var(--color-linha);
+    border-top-color: var(--color-ambar);
+    border-radius: 999px;
+    opacity: 0;
+  }
+
+  .nav-pendente[data-pendente="true"] {
+    animation:
+      aparecer 1ms 150ms forwards,
+      girar 700ms linear infinite;
+  }
+
+  /* ── Carregamento ───────────────────────────────────────────────────── */
+
+  /* Spinner na cor do texto, para usar dentro de botões */
+  .girador {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+    border: 1.75px solid currentColor;
+    border-top-color: transparent;
+    border-radius: 999px;
+    animation: girar 650ms linear infinite;
+  }
+
+  .esqueleto {
+    border-radius: 6px;
+    background: linear-gradient(90deg, var(--color-linha-2) 0%, #f4f6f4 50%, var(--color-linha-2) 100%);
+    background-size: 200% 100%;
+    animation: brilho 1.3s ease-in-out infinite;
+  }
+}
+
+@keyframes brilho {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -100% 0;
+  }
+}
+
+@keyframes girar {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes aparecer {
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }
 
 @media print {
-  @page { margin: 1.5cm; size: A4; }
-  body { background: white !important; color: black !important; }
+  @page {
+    margin: 1.5cm;
+    size: A4;
+  }
+
+  body {
+    background: white !important;
+    color: black !important;
+  }
 }

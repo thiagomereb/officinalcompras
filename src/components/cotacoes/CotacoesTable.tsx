@@ -2,10 +2,11 @@
 
 import { useMemo, useState, useTransition } from 'react'
 import Link from 'next/link'
-import { Search, Pencil, Clock, CheckCircle, AlertCircle, Paperclip, Sparkles, Loader2, FileText } from 'lucide-react'
+import { Search, Paperclip, Sparkles, ArrowUpRight, FileText } from 'lucide-react'
 import { prepararExtracao } from '@/app/(dashboard)/cotacoes/actions'
 import { concluirExtracao } from '@/lib/ocr-browser'
 import { ehFalha } from '@/lib/acoes'
+import { Vazio } from '@/components/ui/Vazio'
 
 export type CotacaoRow = {
   id: string
@@ -21,10 +22,10 @@ export type CotacaoRow = {
   totalItens: number
 }
 
-const STATUS_CONFIG = {
-  processando: { label: 'Aguardando itens', icon: Clock, cls: 'bg-yellow-50 text-yellow-700' },
-  processado: { label: 'Itens lançados', icon: CheckCircle, cls: 'bg-green-50 text-green-700' },
-  erro: { label: 'Erro', icon: AlertCircle, cls: 'bg-red-50 text-red-700' },
+const STATUS = {
+  processando: { label: 'Aguardando itens', cls: '' },
+  processado: { label: 'Itens lançados', cls: 'selo-ok' },
+  erro: { label: 'Erro', cls: 'selo-alerta' },
 } as const
 
 function formatDate(d: string | null) {
@@ -126,126 +127,133 @@ export function CotacoesTable({ cotacoes }: { cotacoes: CotacaoRow[] }) {
 
   return (
     <div>
-      <div className="flex items-center gap-3 mb-4 flex-wrap">
-        <div className="relative flex-1 min-w-[220px] max-w-sm">
-          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+        <div className="relative w-full sm:w-80">
+          <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ardosia-2" />
           <input
             value={busca}
             onChange={(e) => setBusca(e.target.value)}
-            placeholder="Buscar por fornecedor ou arquivo..."
-            className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            placeholder="Filtrar por fornecedor ou arquivo"
+            aria-label="Filtrar cotações"
+            className="campo pl-8"
           />
         </div>
 
         {selecionados.size > 0 && (
-          <div className="flex items-center gap-3 ml-auto">
-            <span className="text-sm text-gray-500">{selecionados.size} selecionado(s)</span>
+          <div className="flex items-center gap-3 sm:ml-auto">
+            <span className="text-[13px] text-ardosia">{selecionados.size} selecionada(s)</span>
             <button
               onClick={handleExtrairSelecionados}
               disabled={pending}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+              className="btn btn-primario"
             >
-              {pending ? <Loader2 size={15} className="animate-spin" /> : <Sparkles size={15} />}
-              {pending ? progresso || 'Extraindo...' : 'Extrair com IA'}
+              {pending ? <span className="girador" aria-hidden="true" /> : <Sparkles size={15} />}
+              {pending ? progresso || 'Extraindo…' : 'Extrair com IA'}
             </button>
           </div>
         )}
       </div>
 
       {resultado && (
-        <div className="mb-4 text-sm text-gray-600 bg-gray-50 border border-gray-200 rounded-lg px-4 py-2">
-          {resultado.resumo}
-          {resultado.falhas.length > 0 && (
-            <ul className="mt-1 list-disc pl-5 text-red-600">
-              {resultado.falhas.map((f) => <li key={f}>{f}</li>)}
-            </ul>
-          )}
+        <div className={`aviso mb-4 ${resultado.falhas.length ? 'aviso-erro' : 'aviso-ok'}`} role="status">
+          <div>
+            {resultado.resumo}
+            {resultado.falhas.length > 0 && (
+              <ul className="mt-1 list-disc pl-5">
+                {resultado.falhas.map((f) => <li key={f}>{f}</li>)}
+              </ul>
+            )}
+          </div>
         </div>
       )}
 
       {filtradas.length === 0 ? (
-        <div className="text-center py-16 bg-white rounded-xl border border-gray-200">
-          <FileText size={40} className="mx-auto text-gray-300 mb-4" />
-          <p className="text-gray-500 font-medium">Nenhuma cotação encontrada</p>
-        </div>
+        <Vazio
+          icone={FileText}
+          titulo="Nenhuma cotação encontrada"
+          texto={`Nenhum fornecedor ou arquivo corresponde a “${busca.trim()}”.`}
+        />
       ) : (
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-          <table className="w-full text-sm">
+        <div className="painel overflow-x-auto">
+          <table className="tabela">
             <thead>
-              <tr className="border-b border-gray-200 bg-gray-50">
-                <th className="w-10 px-4 py-3">
+              <tr>
+                <th className="w-10">
                   <input
                     type="checkbox"
                     checked={todasVisiveisSelecionadas}
                     onChange={toggleTodasVisiveis}
                     disabled={selecionaveisVisiveis.length === 0}
-                    title="Selecionar todos os arquivos visíveis"
+                    aria-label="Selecionar todas as cotações com arquivo"
                   />
                 </th>
-                <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Fornecedor</th>
-                <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Data</th>
-                <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Validade</th>
-                <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Itens</th>
-                <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Condições</th>
-                <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Status</th>
-                <th className="px-6 py-3" />
+                <th>Fornecedor</th>
+                <th>Data</th>
+                <th>Validade</th>
+                <th className="num">Itens</th>
+                <th>Condições</th>
+                <th>Situação</th>
+                <th>
+                  <span className="sr-only">Ações</span>
+                </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
+            <tbody>
               {filtradas.map((c) => {
-                const status = STATUS_CONFIG[c.status as keyof typeof STATUS_CONFIG] ?? STATUS_CONFIG.processando
-                const StatusIcon = status.icon
+                const status = STATUS[c.status as keyof typeof STATUS] ?? STATUS.processando
+                const condicoes = [
+                  c.prazo_entrega_dias != null && `entrega ${c.prazo_entrega_dias} d`,
+                  c.prazo_pagamento_dias != null && `pgto ${c.prazo_pagamento_dias} d`,
+                  c.frete_fixo ? `frete R$ ${c.frete_fixo.toFixed(2).replace('.', ',')}` : null,
+                ].filter(Boolean)
 
                 return (
-                  <tr key={c.id} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-4 py-4">
+                  <tr key={c.id} className={selecionados.has(c.id) ? 'escolhido' : undefined}>
+                    <td>
                       <input
                         type="checkbox"
                         checked={selecionados.has(c.id)}
                         onChange={() => toggle(c.id)}
                         disabled={!c.signedUrl}
                         title={c.signedUrl ? undefined : 'Sem arquivo anexado'}
+                        aria-label={`Selecionar cotação de ${c.fornecedorNome}`}
                       />
                     </td>
-                    <td className="px-6 py-4 font-medium text-gray-900">{c.fornecedorNome}</td>
-                    <td className="px-6 py-4 text-gray-500">{formatDate(c.data_cotacao)}</td>
-                    <td className="px-6 py-4 text-gray-500">{formatDate(c.validade_cotacao)}</td>
-                    <td className="px-6 py-4">
-                      <span className="font-medium text-gray-700">{c.totalItens}</span>
-                      <span className="text-gray-400 ml-1">item(s)</span>
+                    <td className="font-medium">
+                      <Link href={`/cotacoes/${c.id}`} className="hover:underline">
+                        {c.fornecedorNome}
+                      </Link>
                     </td>
-                    <td className="px-6 py-4">
-                      <div className="text-xs text-gray-500 space-y-0.5">
-                        {c.prazo_entrega_dias != null && <div>Entrega: {c.prazo_entrega_dias}d</div>}
-                        {c.prazo_pagamento_dias != null && <div>Pgto: {c.prazo_pagamento_dias}d</div>}
-                        {c.frete_fixo ? <div>Frete: R$ {c.frete_fixo.toFixed(2)}</div> : null}
-                      </div>
+                    <td className="num whitespace-nowrap text-ardosia">{formatDate(c.data_cotacao)}</td>
+                    <td className="num whitespace-nowrap text-ardosia">{formatDate(c.validade_cotacao)}</td>
+                    <td className="num">{c.totalItens}</td>
+                    <td className="text-[12.5px] text-ardosia">
+                      {condicoes.length ? condicoes.join(' · ') : <span className="text-ardosia-2">não informadas</span>}
                     </td>
-                    <td className="px-6 py-4">
-                      <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium ${status.cls}`}>
-                        <StatusIcon size={11} />
-                        {status.label}
-                      </span>
+                    <td>
+                      <span className={`selo ${status.cls}`}>{status.label}</span>
                     </td>
-                    <td className="px-6 py-4 text-right">
-                      <div className="flex items-center justify-end gap-3">
+                    <td>
+                      <div className="flex items-center justify-end gap-1">
                         {c.signedUrl && (
                           <a
                             href={c.signedUrl}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="text-gray-400 hover:text-gray-600 transition-colors"
+                            className="btn btn-fantasma btn-icone btn-sm"
                             title={c.arquivo_nome ?? 'Arquivo'}
+                            aria-label={`Abrir arquivo ${c.arquivo_nome ?? ''}`}
                           >
                             <Paperclip size={14} />
                           </a>
                         )}
                         <Link
                           href={`/cotacoes/${c.id}`}
-                          className="inline-flex items-center gap-1.5 text-gray-400 hover:text-gray-700 transition-colors text-xs"
+                          className="btn btn-fantasma btn-icone btn-sm"
+                          title="Abrir cotação"
+                          aria-label={`Abrir cotação de ${c.fornecedorNome}`}
                         >
-                          <Pencil size={13} />
-                          Abrir
+                          <ArrowUpRight size={15} />
                         </Link>
                       </div>
                     </td>

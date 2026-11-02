@@ -1,12 +1,13 @@
 ﻿import { createClient } from '@/lib/supabase/server'
 import { buscarTodos } from '@/lib/supabase/consultas'
 import { calcularScores, agruparPorInsumo, PESOS_PADRAO, type CandidatoItem, type CandidatoSemScore } from '@/lib/comparacao'
-import { KpiCard } from '@/components/dashboard/KpiCard'
+import { Indicadores } from '@/components/dashboard/Indicadores'
+import { Cabecalho } from '@/components/ui/Cabecalho'
 import { ComparativoTable, type ComparativoRow } from '@/components/dashboard/ComparativoTable'
 import { PriceHistoryChart, type PricePoint } from '@/components/dashboard/PriceHistoryChart'
 import { AlertasPanel, type Alerta } from '@/components/dashboard/AlertasPanel'
 import { RankingFornecedores, type RankingItem } from '@/components/dashboard/RankingFornecedores'
-import { TrendingDown, Package, Building2, Bell } from 'lucide-react'
+import { Plus } from 'lucide-react'
 import Link from 'next/link'
 
 type CotacaoDoItem = {
@@ -21,8 +22,12 @@ type CotacaoDoItem = {
   fornecedores: { razao_social: string; nome_fantasia: string | null } | null
 }
 
-function dataLocalISO(d: Date) {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+// O servidor roda em UTC; sem fixar o fuso, depois das 21h o "hoje" já seria amanhã
+const FUSO = 'America/Sao_Paulo'
+
+function dataISO(d: Date) {
+  // en-CA formata como AAAA-MM-DD
+  return new Intl.DateTimeFormat('en-CA', { timeZone: FUSO }).format(d)
 }
 
 // Dois candidatos mais baratos de fornecedores diferentes, comparando só preços
@@ -39,10 +44,8 @@ export default async function DashboardPage() {
   const supabase = await createClient()
 
   const agora = new Date()
-  const today = dataLocalISO(agora)
-  const em7Dias = new Date(agora)
-  em7Dias.setDate(em7Dias.getDate() + 7)
-  const in7Days = dataLocalISO(em7Dias)
+  const today = dataISO(agora)
+  const in7Days = dataISO(new Date(agora.getTime() + 7 * 86_400_000))
 
   const [
     { count: totalInsumos },
@@ -221,61 +224,55 @@ export default async function DashboardPage() {
     weekday: 'long',
     day: 'numeric',
     month: 'long',
+    timeZone: FUSO,
   })
+  // Só a primeira letra: o capitalize do CSS faria "Segunda-Feira, 2 De Novembro"
+  const dataCabecalho = dateLabel.charAt(0).toUpperCase() + dateLabel.slice(1)
 
   return (
-    <div className="p-6 space-y-5">
-      {/* Header */}
-      <div className="flex items-start justify-between">
-        <div>
-          <h2 className="text-xl font-bold text-slate-900">Dashboard</h2>
-          <p className="text-sm text-slate-500 mt-0.5 capitalize">{dateLabel}</p>
-        </div>
-        <Link
-          href="/cotacoes/nova"
-          className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
-        >
-          + Nova Cotação
-        </Link>
-      </div>
+    <div className="pagina">
+      <Cabecalho
+        grupo="Compras"
+        titulo="Painel"
+        descricao={dataCabecalho}
+        acoes={
+          <Link href="/cotacoes/nova" className="btn btn-primario">
+            <Plus size={16} />
+            Nova cotação
+          </Link>
+        }
+      />
 
-      {/* KPI cards */}
-      <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
-        <KpiCard
-          title="Economia Potencial"
-          value={economiaMediaPct != null ? `${economiaMediaPct.toFixed(1).replace('.', ',')}%` : '—'}
-          subtitle="média vs. 2º menor preço"
-          color="green"
-          icon={<TrendingDown size={18} />}
-        />
-        <KpiCard
-          title="Insumos Analisados"
-          value={String(insumosComMultiplos)}
-          subtitle={`com 2+ fornecedores, de ${totalInsumos ?? 0} cadastrados`}
-          color="blue"
-          icon={<Package size={18} />}
-        />
-        <KpiCard
-          title="Fornecedor Líder"
-          value={topFornecedor.length > 14 ? topFornecedor.slice(0, 12) + '…' : topFornecedor}
-          subtitle={rankingItems[0] ? `melhor score em ${rankingItems[0].wins} insumo(s)` : 'sem dados'}
-          color="amber"
-          icon={<Building2 size={18} />}
-        />
-        <KpiCard
-          title="Alertas Ativos"
-          value={String(alertas.length)}
-          subtitle={alertas.length > 0 ? 'requer atenção' : 'tudo em ordem'}
-          color={alertas.length > 0 ? 'red' : 'green'}
-          icon={<Bell size={18} />}
-        />
-      </div>
+      <Indicadores
+        itens={[
+          {
+            rotulo: 'Economia potencial',
+            valor: economiaMediaPct != null ? `${economiaMediaPct.toFixed(1).replace('.', ',')}%` : '—',
+            detalhe: 'média frente ao 2º menor preço',
+          },
+          {
+            rotulo: 'Insumos comparados',
+            valor: insumosComMultiplos.toLocaleString('pt-BR'),
+            detalhe: `com 2+ fornecedores, de ${(totalInsumos ?? 0).toLocaleString('pt-BR')} cadastrados`,
+          },
+          {
+            rotulo: 'Fornecedor líder',
+            valor: topFornecedor,
+            texto: true,
+            detalhe: rankingItems[0] ? `melhor oferta em ${rankingItems[0].wins} insumo(s)` : 'sem cotações vigentes',
+          },
+          {
+            rotulo: 'Alertas',
+            valor: String(alertas.length),
+            alerta: alertas.length > 0,
+            detalhe: alertas.length > 0 ? 'veja a lista abaixo' : 'nada pendente',
+          },
+        ]}
+      />
 
-      {/* Main comparison table */}
       <ComparativoTable rows={comparativoRows} />
 
-      {/* Bottom panels */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div className="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-2">
         <PriceHistoryChart
           data={priceHistoryData}
           fornecedores={priceHistoryFornecedores}
@@ -285,7 +282,7 @@ export default async function DashboardPage() {
         <AlertasPanel alertas={alertas} />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div className="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-2">
         <RankingFornecedores items={rankingItems} />
       </div>
     </div>

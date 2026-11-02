@@ -25,24 +25,21 @@ export function NovoMapaForm({ action, children }: Props) {
   )
 
   return (
-    <form action={formAction} className="space-y-8 max-w-3xl">
+    <form action={formAction} className="max-w-3xl space-y-5">
       {children}
 
       {erro && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
+        <p className="aviso aviso-erro" role="alert">
           {erro}
-        </div>
+        </p>
       )}
 
-      <div className="flex gap-3">
-        <button
-          type="submit"
-          disabled={pending}
-          className="px-5 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
-        >
-          {pending ? 'Gerando...' : 'Gerar comparação →'}
+      <div className="flex flex-wrap gap-2">
+        <button type="submit" disabled={pending} className="btn btn-primario">
+          {pending && <span className="girador" aria-hidden="true" />}
+          {pending ? 'Gerando…' : 'Gerar comparação'}
         </button>
-        <Link href="/mapas" className="px-5 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
+        <Link href="/mapas" className="btn btn-secundario">
           Cancelar
         </Link>
       </div>

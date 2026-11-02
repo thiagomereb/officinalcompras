@@ -4,41 +4,41 @@ export type RankingItem = {
   total: number
 }
 
+// O líder leva o âmbar — é o fornecedor que o sistema "escolheria" mais vezes
 export function RankingFornecedores({ items }: { items: RankingItem[] }) {
   const max = Math.max(...items.map((i) => i.wins), 1)
-  const medals = ['bg-amber-100 text-amber-700', 'bg-slate-200 text-slate-600', 'bg-orange-100 text-orange-700']
 
   return (
-    <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
-      <h3 className="font-semibold text-slate-900 mb-0.5">Ranking de Fornecedores</h3>
-      <p className="text-xs text-slate-400 mb-4">Por itens com melhor preço</p>
+    <section className="painel">
+      <div className="painel-topo">
+        <div>
+          <h2 className="painel-titulo">Fornecedores com mais melhores ofertas</h2>
+          <p className="text-[12.5px] text-ardosia">Insumos em que cada um tem o melhor score</p>
+        </div>
+      </div>
       {items.length === 0 ? (
-        <p className="text-sm text-slate-400">Cadastre cotações para ver o ranking.</p>
+        <p className="px-5 py-6 text-[13.5px] text-ardosia">Lance cotações para ver o ranking.</p>
       ) : (
-        <div className="space-y-3">
+        <ol className="space-y-4 px-5 py-5">
           {items.map((item, i) => (
-            <div key={item.nome}>
-              <div className="flex items-center justify-between mb-1.5">
-                <div className="flex items-center gap-2 min-w-0">
-                  <span
-                    className={`text-xs font-bold w-5 h-5 rounded-full flex items-center justify-center shrink-0 ${medals[i] ?? 'bg-slate-100 text-slate-500'}`}
-                  >
-                    {i + 1}
-                  </span>
-                  <span className="text-sm font-medium text-slate-700 truncate">{item.nome}</span>
-                </div>
-                <span className="text-xs text-slate-400 shrink-0 ml-2">{item.wins} itens</span>
+            <li key={item.nome}>
+              <div className="mb-1.5 flex items-baseline justify-between gap-3">
+                <span className="min-w-0 truncate text-[13.5px] font-medium">{item.nome}</span>
+                <span className="leitura shrink-0 text-[12.5px] text-ardosia">
+                  {item.wins}
+                  <span className="text-ardosia-2">/{item.total}</span>
+                </span>
               </div>
-              <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+              <div className="h-1.5 overflow-hidden rounded-full bg-nevoa">
                 <div
-                  className="h-full bg-blue-500 rounded-full transition-all duration-500"
+                  className={`h-full rounded-full ${i === 0 ? 'bg-ambar' : 'bg-grafite/70'}`}
                   style={{ width: `${(item.wins / max) * 100}%` }}
                 />
               </div>
-            </div>
+            </li>
           ))}
-        </div>
+        </ol>
       )}
-    </div>
+    </section>
   )
 }

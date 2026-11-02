@@ -1,6 +1,5 @@
-﻿import Link from 'next/link'
-import { notFound } from 'next/navigation'
-import { ChevronLeft, CheckCircle } from 'lucide-react'
+﻿import { notFound } from 'next/navigation'
+import { GitCompare } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { PESOS_PADRAO, type Pesos } from '@/lib/comparacao'
 import { carregarGruposMapa } from '@/lib/mapas'
@@ -8,6 +7,8 @@ import { ComparacaoTable } from '@/components/mapas/ComparacaoTable'
 import { salvarSelecoes, aprovarMapa, excluirMapa } from '../actions'
 import { AprovarMapaButton } from './AprovarMapaButton'
 import { ExcluirMapaButton } from './ExcluirMapaButton'
+import { Cabecalho } from '@/components/ui/Cabecalho'
+import { Vazio } from '@/components/ui/Vazio'
 
 export default async function MapaPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -65,48 +66,50 @@ export default async function MapaPage({ params }: { params: Promise<{ id: strin
     selecoesMapa[s.insumo_id] = { cotacao_item_id: s.cotacao_item_id ?? '', quantidade: s.quantidade }
   }
 
-  return (
-    <div className="p-8 space-y-6">
-      <div>
-        <Link href="/mapas" className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 mb-4">
-          <ChevronLeft size={16} />
-          Voltar para mapas
-        </Link>
-        <div className="flex items-start justify-between">
-          <div>
-            <h2 className="text-2xl font-bold text-gray-900">{mapaData.titulo}</h2>
-            <p className="text-gray-500 mt-1 text-sm">
-              {grupos.length} insumo(s) · {mapaData.cotacoes_ids.length} cotação(ões)
-              {aprovado && (
-                <span className="ml-3 inline-flex items-center gap-1 text-green-600 font-medium">
-                  <CheckCircle size={13} /> Aprovado
-                </span>
-              )}
-            </p>
-          </div>
-          <div className="flex gap-3">
-            {!aprovado && (
-              <AprovarMapaButton id={id} action={aprovarMapa} />
-            )}
-            <ExcluirMapaButton id={id} action={excluirMapa} />
-          </div>
-        </div>
+  const criterios: [string, number][] = [
+    ['Preço', pesos.preco],
+    ['Entrega', pesos.entrega],
+    ['Pagamento', pesos.pagamento],
+    ['Frete', pesos.frete],
+  ]
 
-        {/* Pesos ativos */}
-        <div className="mt-4 flex flex-wrap gap-3">
-          {([['Preço', pesos.preco], ['Entrega', pesos.entrega], ['Pagamento', pesos.pagamento], ['Frete', pesos.frete]] as [string, number][]).map(([label, valor]) => (
-            <span key={label} className="inline-flex items-center gap-1 px-2.5 py-1 bg-gray-100 text-gray-600 text-xs rounded-full">
-              <span className="font-medium">{label}:</span> {valor}%
+  return (
+    <div className="pagina">
+      <Cabecalho
+        voltar={{ href: '/mapas', label: 'Mapas de cotação' }}
+        grupo="Mapa de cotação"
+        titulo={mapaData.titulo}
+        descricao={
+          <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <span>
+              {grupos.length} insumo(s) · {mapaData.cotacoes_ids.length} cotação(ões)
             </span>
-          ))}
-        </div>
-      </div>
+            <span className={`selo ${aprovado ? 'selo-ok' : ''}`}>{aprovado ? 'Aprovado' : 'Rascunho'}</span>
+          </span>
+        }
+        acoes={
+          <>
+            {!aprovado && <AprovarMapaButton id={id} action={aprovarMapa} />}
+            <ExcluirMapaButton id={id} action={excluirMapa} />
+          </>
+        }
+      />
+
+      <p className="mb-5 flex flex-wrap items-center gap-x-4 gap-y-1 text-[12.5px] text-ardosia">
+        <span className="rotulo">Pesos</span>
+        {criterios.map(([label, valor]) => (
+          <span key={label}>
+            {label} <span className="leitura text-grafite">{valor}%</span>
+          </span>
+        ))}
+      </p>
 
       {grupos.length === 0 ? (
-        <div className="text-center py-16 bg-white rounded-xl border border-dashed border-gray-300">
-          <p className="text-gray-400 text-sm">Nenhum item com insumo vinculado nas cotações selecionadas.</p>
-          <p className="text-gray-300 text-xs mt-1">Volte às cotações e vincule os itens à tabela mestre de insumos.</p>
-        </div>
+        <Vazio
+          icone={GitCompare}
+          titulo="Nenhum item vinculado nas cotações deste mapa"
+          texto="A comparação é feita por insumo. Abra as cotações e vincule os itens à tabela de insumos."
+        />
       ) : (
         <ComparacaoTable
           grupos={grupos}

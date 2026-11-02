@@ -31,47 +31,50 @@ export function InsumoForm({ insumo, sinonimos = [], action }: Props) {
   )
 
   return (
-    <form action={formAction} className="space-y-6 max-w-2xl">
+    <form action={formAction} className="space-y-6">
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
+        <p className="aviso aviso-erro" role="alert">
           {error}
-        </div>
+        </p>
       )}
 
-      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-x-5 gap-y-5 sm:grid-cols-2">
         <div className="sm:col-span-2">
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Nome Padrão <span className="text-red-500">*</span>
+          <label htmlFor="i-nome" className="legenda">
+            Nome padrão <span className="obrigatorio">*</span>
           </label>
           <input
+            id="i-nome"
             name="nome_padrao"
             required
             defaultValue={insumo?.nome_padrao}
-            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            placeholder="Ex: Ácido Ascórbico"
+            className="campo"
+            placeholder="Ácido Ascórbico"
           />
-          <p className="text-xs text-gray-400 mt-1">Nome oficial que será usado em todo o sistema.</p>
+          <p className="ajuda">O nome oficial, usado em todo o sistema.</p>
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">CAS Number</label>
+          <label htmlFor="i-cas" className="legenda">Número CAS</label>
           <input
+            id="i-cas"
             name="cas_number"
             defaultValue={insumo?.cas_number ?? ''}
-            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono"
-            placeholder="Ex: 50-81-7"
+            className="campo leitura"
+            placeholder="50-81-7"
           />
-          <p className="text-xs text-gray-400 mt-1">Código químico único para deduplicação.</p>
+          <p className="ajuda">Identifica a substância e evita cadastro duplicado.</p>
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Unidade Padrão <span className="text-red-500">*</span>
+          <label htmlFor="i-unidade" className="legenda">
+            Unidade padrão <span className="obrigatorio">*</span>
           </label>
           <select
+            id="i-unidade"
             name="unidade_padrao"
             defaultValue={insumo?.unidade_padrao ?? 'g'}
-            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="campo"
           >
             {UNIDADES.map((u) => (
               <option key={u} value={u}>{u}</option>
@@ -80,36 +83,29 @@ export function InsumoForm({ insumo, sinonimos = [], action }: Props) {
         </div>
 
         <div className="sm:col-span-2">
-          <label className="block text-sm font-medium text-gray-700 mb-1">Descrição</label>
+          <label htmlFor="i-descricao" className="legenda">Observações</label>
           <textarea
+            id="i-descricao"
             name="descricao"
             defaultValue={insumo?.descricao ?? ''}
             rows={2}
-            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
-            placeholder="Observações sobre este insumo..."
+            className="campo"
+            placeholder="Forma, pureza, cuidados de armazenamento…"
           />
         </div>
 
         <div className="sm:col-span-2">
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Sinônimos / Nomes Alternativos
-          </label>
+          <span className="legenda">Sinônimos</span>
           <SinonimosEditor inicial={sinonimos.map((s) => s.sinonimo)} />
         </div>
       </div>
 
-      <div className="flex gap-3 pt-2">
-        <button
-          type="submit"
-          disabled={pending}
-          className="px-5 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-        >
-          {pending ? 'Salvando...' : insumo ? 'Salvar alterações' : 'Cadastrar insumo'}
+      <div className="flex flex-wrap gap-2 pt-1">
+        <button type="submit" disabled={pending} className="btn btn-primario">
+          {pending && <span className="girador" aria-hidden="true" />}
+          {pending ? 'Salvando…' : insumo ? 'Salvar alterações' : 'Cadastrar insumo'}
         </button>
-        <Link
-          href="/insumos"
-          className="px-5 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-        >
+        <Link href="/insumos" className="btn btn-secundario">
           Cancelar
         </Link>
       </div>

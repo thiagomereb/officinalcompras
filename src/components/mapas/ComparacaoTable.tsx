@@ -1,10 +1,10 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { CheckCircle, Trophy, Save, Printer } from 'lucide-react'
+import { Check, Save, Printer } from 'lucide-react'
 import type { GrupoInsumo } from '@/lib/comparacao'
 import type { salvarSelecoes } from '@/app/(dashboard)/mapas/actions'
-import { formatarPrecoBase } from '@/lib/unidades'
+import { LeituraPreco } from '@/components/ui/LeituraPreco'
 
 type InfoDuplicata = { outroId: string; outroNome: string; eMaisBarato: boolean; diffPct: number }
 
@@ -68,76 +68,56 @@ export function ComparacaoTable({ grupos, selecoesSalvas, mapaId, aprovado, onSa
   const totalSelecionados = grupos.filter((g) => selecoesFinal[g.insumo_id]).length
 
   return (
-    <div className="space-y-6">
-      {/* Barra de ação */}
-      <div className="flex items-center justify-between sticky top-0 bg-white z-10 py-3 border-b border-gray-200 -mx-8 px-8">
-        <p className="text-sm text-gray-500">
-          <span className="font-medium text-gray-900">{totalSelecionados}</span> de{' '}
-          <span className="font-medium text-gray-900">{grupos.length}</span> insumos selecionados
+    <div className="space-y-5">
+      {/* Barra de ação fixa no topo enquanto rola a lista de insumos */}
+      <div className="sticky top-14 z-10 -mx-4 flex flex-wrap items-center justify-between gap-3 border-b border-linha bg-nevoa/95 px-4 py-3 backdrop-blur lg:top-0 lg:-mx-10 lg:px-10">
+        <p className="text-[13px] text-ardosia">
+          <span className="num font-medium text-grafite">{totalSelecionados}</span> de{' '}
+          <span className="num font-medium text-grafite">{grupos.length}</span> insumos com fornecedor escolhido
         </p>
-        <div className="flex items-center gap-3">
-          {erro && <span className="text-sm text-red-600">{erro}</span>}
-          <a
-            href={`/mapas/${mapaId}/imprimir`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 px-3 py-2 text-sm text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-          >
-            <Printer size={15} />
+        <div className="flex flex-wrap items-center gap-2">
+          {erro && (
+            <span className="text-[13px] text-oxido" role="alert">
+              {erro}
+            </span>
+          )}
+          <a href={`/mapas/${mapaId}/imprimir`} target="_blank" rel="noopener noreferrer" className="btn btn-secundario btn-sm">
+            <Printer size={14} />
             Imprimir
           </a>
           {!aprovado && (
-            <button
-              onClick={handleSalvar}
-              disabled={pending}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
-            >
-              <Save size={15} />
-              {pending ? 'Salvando...' : saved ? 'Salvo ✓' : 'Salvar seleções'}
+            <button onClick={handleSalvar} disabled={pending} className="btn btn-primario btn-sm">
+              {pending ? <span className="girador" aria-hidden="true" /> : saved ? <Check size={14} /> : <Save size={14} />}
+              {pending ? 'Salvando…' : saved ? 'Escolhas salvas' : 'Salvar escolhas'}
             </button>
           )}
         </div>
       </div>
 
-      {/* Grupos por insumo */}
       {grupos.map((grupo) => {
         const selecionadoId = selecoesFinal[grupo.insumo_id]
+        const duplicata = duplicatasInfo?.[grupo.insumo_id]
 
         return (
-          <div key={grupo.insumo_id} className={`bg-white rounded-xl border overflow-hidden ${
-              duplicatasInfo?.[grupo.insumo_id]?.eMaisBarato
-                ? 'border-green-300'
-                : duplicatasInfo?.[grupo.insumo_id]
-                ? 'border-yellow-300'
-                : 'border-gray-200'
-            }`}>
-            <div className={`px-5 py-3 border-b flex items-center justify-between ${
-              duplicatasInfo?.[grupo.insumo_id]?.eMaisBarato
-                ? 'bg-green-50 border-green-200'
-                : duplicatasInfo?.[grupo.insumo_id]
-                ? 'bg-yellow-50 border-yellow-200'
-                : 'bg-gray-50 border-gray-200'
-            }`}>
-              <div className="flex items-center gap-2 flex-wrap">
-                <h4 className="font-semibold text-gray-900">{grupo.insumo_nome}</h4>
-                {duplicatasInfo?.[grupo.insumo_id] && (() => {
-                  const d = duplicatasInfo[grupo.insumo_id]
-                  return d.eMaisBarato
-                    ? (
-                      <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-green-700 bg-green-100 px-2 py-0.5 rounded-full">
-                        ✓ Mais barato · dupl. de &ldquo;{d.outroNome}&rdquo;
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-yellow-700 bg-yellow-100 px-2 py-0.5 rounded-full">
-                        ⚠ +{d.diffPct.toFixed(0)}% mais caro · dupl. de &ldquo;{d.outroNome}&rdquo;
-                      </span>
-                    )
-                })()}
+          <section key={grupo.insumo_id} className="painel" aria-labelledby={`insumo-${grupo.insumo_id}`}>
+            <div className="painel-topo">
+              <div className="flex min-w-0 flex-wrap items-center gap-2">
+                <h3 id={`insumo-${grupo.insumo_id}`} className="painel-titulo">
+                  {grupo.insumo_nome}
+                </h3>
+                {duplicata &&
+                  (duplicata.eMaisBarato ? (
+                    <span className="selo selo-ambar">mais barato que &ldquo;{duplicata.outroNome}&rdquo;, mesmo insumo</span>
+                  ) : (
+                    <span className="selo selo-alerta">
+                      +{duplicata.diffPct.toFixed(0)}% que &ldquo;{duplicata.outroNome}&rdquo;, mesmo insumo
+                    </span>
+                  ))}
               </div>
-              <div className="flex items-center gap-3">
-                <span className="text-xs text-gray-400">{grupo.candidatos.length} fornecedor(es)</span>
-                <div className="flex items-center gap-1.5">
-                  <label className="text-xs text-gray-500">Qtd:</label>
+              <div className="flex items-center gap-4">
+                <span className="text-[12.5px] text-ardosia">{grupo.candidatos.length} oferta(s)</span>
+                <label className="flex items-center gap-2 text-[12.5px] text-ardosia">
+                  Quantidade
                   <input
                     type="number"
                     min={0}
@@ -145,97 +125,89 @@ export function ComparacaoTable({ grupos, selecoesSalvas, mapaId, aprovado, onSa
                     disabled={aprovado}
                     value={quantidades[grupo.insumo_id] ?? ''}
                     onChange={(e) => handleQuantidade(grupo.insumo_id, Number(e.target.value))}
-                    className="w-24 rounded border border-gray-300 px-2 py-1 text-xs text-right focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50"
+                    className="campo campo-sm leitura w-24 text-right"
                     placeholder="0"
                   />
-                </div>
+                </label>
               </div>
             </div>
 
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-gray-100">
-                  <th className="text-left px-5 py-2 text-xs font-medium text-gray-400">Fornecedor</th>
-                  <th className="text-right px-5 py-2 text-xs font-medium text-gray-400">Preço Unit.</th>
-                  <th className="text-left px-5 py-2 text-xs font-medium text-gray-400">Unid.</th>
-                  <th className="text-right px-5 py-2 text-xs font-medium text-gray-400">Preço/base</th>
-                  <th className="text-right px-5 py-2 text-xs font-medium text-gray-400">Entrega</th>
-                  <th className="text-right px-5 py-2 text-xs font-medium text-gray-400">Pgto</th>
-                  <th className="text-right px-5 py-2 text-xs font-medium text-gray-400">Frete</th>
-                  <th className="text-left px-5 py-2 text-xs font-medium text-gray-400">Validade Lote</th>
-                  <th className="text-right px-5 py-2 text-xs font-medium text-gray-400">Score</th>
-                  <th className="w-10 px-5 py-2" />
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-50">
-                {grupo.candidatos.map((c, idx) => {
-                  const isSelecionado = selecionadoId === c.cotacao_item_id
-                  const isMelhor = idx === 0
-
-                  return (
-                    <tr
-                      key={c.cotacao_item_id}
-                      onClick={() => handleSelecionar(grupo.insumo_id, c.cotacao_item_id)}
-                      className={`transition-colors ${aprovado ? '' : 'cursor-pointer'} ${
-                        isSelecionado
-                          ? 'bg-blue-50 hover:bg-blue-100'
-                          : 'hover:bg-gray-50'
-                      }`}
-                    >
-                      <td className="px-5 py-2.5">
-                        <div className="flex items-center gap-2">
-                          {isMelhor && !isSelecionado && (
-                            <Trophy size={12} className="text-yellow-500 shrink-0" />
+            <div className="overflow-x-auto">
+              <table className="tabela tabela-compacta whitespace-nowrap">
+                <thead>
+                  <tr>
+                    <th className="w-10">
+                      <span className="sr-only">Escolher</span>
+                    </th>
+                    <th>Fornecedor</th>
+                    <th className="num">Preço</th>
+                    <th>Embalagem</th>
+                    <th className="num">Por unidade base</th>
+                    <th className="num">Entrega</th>
+                    <th className="num">Pgto</th>
+                    <th className="num">Frete</th>
+                    <th>Validade lote</th>
+                    <th className="num">Score</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {grupo.candidatos.map((c, idx) => {
+                    const isSelecionado = selecionadoId === c.cotacao_item_id
+                    return (
+                      <tr
+                        key={c.cotacao_item_id}
+                        onClick={() => handleSelecionar(grupo.insumo_id, c.cotacao_item_id)}
+                        className={`${aprovado ? '' : 'cursor-pointer'} ${isSelecionado ? 'escolhido' : ''}`}
+                      >
+                        <td>
+                          <input
+                            type="radio"
+                            name={`escolha-${grupo.insumo_id}`}
+                            checked={isSelecionado}
+                            disabled={aprovado}
+                            onChange={() => handleSelecionar(grupo.insumo_id, c.cotacao_item_id)}
+                            aria-label={`Escolher ${c.fornecedor_nome}`}
+                            className="h-4 w-4 cursor-pointer accent-grafite"
+                          />
+                        </td>
+                        <td>
+                          <span className={isSelecionado ? 'font-medium' : ''}>{c.fornecedor_nome}</span>
+                          {idx === 0 && <span className="ml-2 text-[11.5px] text-ardosia">melhor score</span>}
+                        </td>
+                        <td className="num leitura">
+                          {c.preco_unitario.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                        </td>
+                        <td className="text-ardosia">
+                          {c.quantidade_minima ? `${c.quantidade_minima} ` : ''}
+                          {c.unidade ?? '—'}
+                        </td>
+                        <td className="num">
+                          <LeituraPreco valor={c.preco_base} base={c.unidade_base} className={isSelecionado ? 'font-medium' : ''} />
+                          {!c.preco_comparavel && (
+                            <div
+                              className="text-[11px] text-oxido"
+                              title="Unidade de outra grandeza que a dos demais fornecedores: o preço não entrou no score"
+                            >
+                              unidade diferente
+                            </div>
                           )}
-                          <span className={`font-medium ${isSelecionado ? 'text-blue-700' : 'text-gray-700'}`}>
-                            {c.fornecedor_nome}
-                          </span>
-                        </div>
-                      </td>
-                      <td className={`px-5 py-2.5 text-right font-mono font-medium ${isSelecionado ? 'text-blue-700' : 'text-gray-900'}`}>
-                        {c.preco_unitario.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                      </td>
-                      <td className="px-5 py-2.5 text-gray-500">
-                        {c.quantidade_minima ? `${c.quantidade_minima} ` : ''}{c.unidade ?? '—'}
-                      </td>
-                      <td className="px-5 py-2.5 text-right font-mono text-xs text-gray-500">
-                        {formatarPrecoBase({ valor: c.preco_base, base: c.unidade_base })}
-                        {!c.preco_comparavel && (
-                          <div className="text-[10px] font-sans text-amber-600" title="Unidade de outra grandeza que a dos demais fornecedores: o preço não entrou no score">
-                            unid. diferente
-                          </div>
-                        )}
-                      </td>
-                      <td className="px-5 py-2.5 text-right text-gray-500">
-                        {c.prazo_entrega_dias != null ? `${c.prazo_entrega_dias}d` : '—'}
-                      </td>
-                      <td className="px-5 py-2.5 text-right text-gray-500">
-                        {c.prazo_pagamento_dias != null ? `${c.prazo_pagamento_dias}d` : '—'}
-                      </td>
-                      <td className="px-5 py-2.5 text-right text-gray-500">
-                        {c.frete_fixo ? `R$ ${c.frete_fixo.toFixed(2)}` : 'Grátis'}
-                      </td>
-                      <td className="px-5 py-2.5 text-xs text-gray-500">
-                        {c.validade ? new Date(c.validade + 'T12:00:00').toLocaleDateString('pt-BR') : '—'}
-                      </td>
-                      <td className="px-5 py-2.5 text-right">
-                        <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
-                          isMelhor ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
-                        }`}>
-                          {(c.score * 100).toFixed(0)}
-                        </span>
-                      </td>
-                      <td className="px-5 py-2.5 text-center">
-                        {isSelecionado && (
-                          <CheckCircle size={16} className="text-blue-600 mx-auto" />
-                        )}
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
+                        </td>
+                        <td className="num text-ardosia">{c.prazo_entrega_dias != null ? `${c.prazo_entrega_dias} d` : '—'}</td>
+                        <td className="num text-ardosia">{c.prazo_pagamento_dias != null ? `${c.prazo_pagamento_dias} d` : '—'}</td>
+                        <td className="num text-ardosia">
+                          {c.frete_fixo ? c.frete_fixo.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : 'grátis'}
+                        </td>
+                        <td className="text-ardosia">
+                          {c.validade ? new Date(c.validade + 'T12:00:00').toLocaleDateString('pt-BR') : '—'}
+                        </td>
+                        <td className="num leitura">{(c.score * 100).toFixed(0)}</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </section>
         )
       })}
     </div>

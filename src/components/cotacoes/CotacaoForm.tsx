@@ -17,9 +17,6 @@ interface Props {
 
 type Estado = { erro: string | null; salvo: boolean }
 
-const INPUT =
-  'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent'
-
 export function CotacaoForm({ fornecedores, cotacao, action }: Props) {
   const [estado, formAction, pending] = useActionState(
     async (_: Estado, formData: FormData): Promise<Estado> => {
@@ -50,29 +47,34 @@ export function CotacaoForm({ fornecedores, cotacao, action }: Props) {
 
   const hoje = new Date().toISOString().split('T')[0]
 
+  // Os ids dos campos precisam ser únicos: na página da cotação este form
+  // convive com o de adicionar item
+  const id = (campo: string) => `cotacao-${cotacao?.id ?? 'nova'}-${campo}`
+
   return (
     <form action={formAction} className="space-y-6">
       {estado.erro && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
+        <p className="aviso aviso-erro" role="alert">
           {estado.erro}
-        </div>
+        </p>
       )}
       {cotacao && estado.salvo && !pending && (
-        <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg text-sm">
+        <p className="aviso aviso-ok" role="status">
           Condições salvas.
-        </div>
+        </p>
       )}
 
-      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-x-5 gap-y-5 sm:grid-cols-2">
         <div className="sm:col-span-2">
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Fornecedor <span className="text-red-500">*</span>
+          <label htmlFor={id('fornecedor')} className="legenda">
+            Fornecedor <span className="obrigatorio">*</span>
           </label>
           <select
+            id={id('fornecedor')}
             name="fornecedor_id"
             required
             defaultValue={cotacao?.fornecedor_id ?? ''}
-            className={INPUT}
+            className="campo"
           >
             <option value="">Selecione um fornecedor</option>
             {fornecedores.map((f) => (
@@ -84,125 +86,133 @@ export function CotacaoForm({ fornecedores, cotacao, action }: Props) {
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Data da Cotação <span className="text-red-500">*</span>
+          <label htmlFor={id('data')} className="legenda">
+            Data da cotação <span className="obrigatorio">*</span>
           </label>
           <input
+            id={id('data')}
             type="date"
             name="data_cotacao"
             required
             defaultValue={cotacao?.data_cotacao ?? hoje}
-            className={INPUT}
+            className="campo"
           />
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Validade da Cotação</label>
+          <label htmlFor={id('validade')} className="legenda">Validade da cotação</label>
           <input
+            id={id('validade')}
             type="date"
             name="validade_cotacao"
             defaultValue={cotacao?.validade_cotacao ?? ''}
-            className={INPUT}
+            className="campo"
           />
         </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Prazo de Entrega (dias)</label>
-          <input
-            type="number"
-            name="prazo_entrega_dias"
-            min="0"
-            step="1"
-            placeholder="Ex: 7"
-            defaultValue={cotacao?.prazo_entrega_dias ?? ''}
-            className={INPUT}
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Prazo de Pagamento (dias)</label>
-          <input
-            type="number"
-            name="prazo_pagamento_dias"
-            min="0"
-            step="1"
-            placeholder="Ex: 30"
-            defaultValue={cotacao?.prazo_pagamento_dias ?? ''}
-            className={INPUT}
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Frete Fixo (R$)
-            <span className="text-gray-400 font-normal ml-1">(vazio = grátis)</span>
-          </label>
-          <input
-            type="number"
-            name="frete_fixo"
-            min="0"
-            step="0.01"
-            placeholder="0,00"
-            defaultValue={cotacao?.frete_fixo ?? ''}
-            className={INPUT}
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Frete Grátis Acima de (R$)</label>
-          <input
-            type="number"
-            name="frete_gratis_acima"
-            min="0"
-            step="0.01"
-            placeholder="0,00"
-            defaultValue={cotacao?.frete_gratis_acima ?? ''}
-            className={INPUT}
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Pedido Mínimo (R$)</label>
-          <input
-            type="number"
-            name="pedido_minimo"
-            min="0"
-            step="0.01"
-            placeholder="0,00"
-            defaultValue={cotacao?.pedido_minimo ?? ''}
-            className={INPUT}
-          />
-        </div>
-
-        {!cotacao && (
-          <div className="sm:col-span-2">
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Arquivo da Cotação
-              <span className="text-gray-400 font-normal ml-1">(PDF, Excel, Imagem)</span>
-            </label>
-            <input
-              type="file"
-              name="arquivo"
-              accept={ACCEPT_ARQUIVO_COTACAO}
-              className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-blue-50 file:text-blue-600 hover:file:bg-blue-100 cursor-pointer"
-            />
-          </div>
-        )}
       </div>
 
-      <div className="flex gap-3 pt-2">
-        <button
-          type="submit"
-          disabled={pending}
-          className="px-5 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-        >
-          {pending ? 'Salvando...' : cotacao ? 'Salvar alterações' : 'Criar cotação'}
+      <fieldset className="border-t border-linha-2 pt-5">
+        <legend className="rotulo pr-3">Condições comerciais</legend>
+        <p className="mb-4 mt-1 text-[12.5px] text-ardosia">
+          Entram no score do mapa de cotação. Campo vazio fica neutro na comparação.
+        </p>
+        <div className="grid grid-cols-1 gap-x-5 gap-y-5 sm:grid-cols-2">
+          <div>
+            <label htmlFor={id('entrega')} className="legenda">Prazo de entrega (dias)</label>
+            <input
+              id={id('entrega')}
+              type="number"
+              name="prazo_entrega_dias"
+              min="0"
+              step="1"
+              placeholder="7"
+              defaultValue={cotacao?.prazo_entrega_dias ?? ''}
+              className="campo"
+            />
+          </div>
+
+          <div>
+            <label htmlFor={id('pagamento')} className="legenda">Prazo de pagamento (dias)</label>
+            <input
+              id={id('pagamento')}
+              type="number"
+              name="prazo_pagamento_dias"
+              min="0"
+              step="1"
+              placeholder="30"
+              defaultValue={cotacao?.prazo_pagamento_dias ?? ''}
+              className="campo"
+            />
+          </div>
+
+          <div>
+            <label htmlFor={id('frete')} className="legenda">Frete fixo (R$)</label>
+            <input
+              id={id('frete')}
+              type="number"
+              name="frete_fixo"
+              min="0"
+              step="0.01"
+              placeholder="0,00"
+              defaultValue={cotacao?.frete_fixo ?? ''}
+              className="campo"
+            />
+            <p className="ajuda">Deixe vazio se o frete for grátis.</p>
+          </div>
+
+          <div>
+            <label htmlFor={id('frete-gratis')} className="legenda">Frete grátis acima de (R$)</label>
+            <input
+              id={id('frete-gratis')}
+              type="number"
+              name="frete_gratis_acima"
+              min="0"
+              step="0.01"
+              placeholder="0,00"
+              defaultValue={cotacao?.frete_gratis_acima ?? ''}
+              className="campo"
+            />
+          </div>
+
+          <div>
+            <label htmlFor={id('pedido-minimo')} className="legenda">Pedido mínimo (R$)</label>
+            <input
+              id={id('pedido-minimo')}
+              type="number"
+              name="pedido_minimo"
+              min="0"
+              step="0.01"
+              placeholder="0,00"
+              defaultValue={cotacao?.pedido_minimo ?? ''}
+              className="campo"
+            />
+          </div>
+        </div>
+      </fieldset>
+
+      {!cotacao && (
+        <div className="border-t border-linha-2 pt-5">
+          <label htmlFor={id('arquivo')} className="legenda">
+            Tabela de preços do fornecedor
+          </label>
+          <input
+            id={id('arquivo')}
+            type="file"
+            name="arquivo"
+            accept={ACCEPT_ARQUIVO_COTACAO}
+            className="block w-full cursor-pointer text-[13px] text-ardosia file:mr-3 file:h-9 file:cursor-pointer file:rounded-lg file:border file:border-linha file:bg-papel file:px-3.5 file:text-[13px] file:font-medium file:text-grafite hover:file:bg-nevoa"
+          />
+          <p className="ajuda">PDF, planilha (XLSX/XLS) ou foto da tabela, até 10 MB. Dá para anexar depois também.</p>
+        </div>
+      )}
+
+      <div className="flex flex-wrap gap-2 pt-1">
+        <button type="submit" disabled={pending} className="btn btn-primario">
+          {pending && <span className="girador" aria-hidden="true" />}
+          {pending ? 'Salvando…' : cotacao ? 'Salvar condições' : 'Criar cotação'}
         </button>
         {!cotacao && (
-          <Link
-            href="/cotacoes"
-            className="px-5 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-          >
+          <Link href="/cotacoes" className="btn btn-secundario">
             Cancelar
           </Link>
         )}

@@ -31,10 +31,10 @@ export function ExcluirFornecedorButton({ id, action }: Props) {
     <button
       onClick={handleExcluir}
       disabled={pending}
-      className="inline-flex items-center gap-2 px-3 py-2 text-sm text-red-600 border border-red-200 rounded-lg hover:bg-red-50 disabled:opacity-50 transition-colors"
+      className="btn btn-perigo btn-sm"
     >
-      <Trash2 size={15} />
-      {pending ? 'Excluindo...' : 'Excluir'}
+      {pending ? <span className="girador" aria-hidden="true" /> : <Trash2 size={14} />}
+      {pending ? 'Excluindo…' : 'Excluir fornecedor'}
     </button>
   )
 }

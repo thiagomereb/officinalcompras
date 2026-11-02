@@ -2,8 +2,9 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { ExternalLink } from 'lucide-react'
-import { formatarPrecoBase } from '@/lib/unidades'
+import { ArrowUpRight, Search, Package } from 'lucide-react'
+import { LeituraPreco } from '@/components/ui/LeituraPreco'
+import { Vazio } from '@/components/ui/Vazio'
 
 export type ComparativoRow = {
   insumo_id: string
@@ -21,111 +22,115 @@ export type ComparativoRow = {
   unidade: string | null
 }
 
-function scoreBadgeClass(score: number) {
-  if (score >= 0.7) return 'bg-emerald-100 text-emerald-700'
-  if (score >= 0.4) return 'bg-amber-100 text-amber-700'
-  return 'bg-red-100 text-red-700'
-}
-
 export function ComparativoTable({ rows }: { rows: ComparativoRow[] }) {
   const [search, setSearch] = useState('')
 
-  const filtered = rows.filter(
-    (r) =>
-      r.insumo_nome.toLowerCase().includes(search.toLowerCase()) ||
-      (r.cas_number ?? '').toLowerCase().includes(search.toLowerCase()) ||
-      r.melhor_fornecedor.toLowerCase().includes(search.toLowerCase()),
-  )
+  const termo = search.trim().toLowerCase()
+  const filtered = termo
+    ? rows.filter(
+        (r) =>
+          r.insumo_nome.toLowerCase().includes(termo) ||
+          (r.cas_number ?? '').toLowerCase().includes(termo) ||
+          r.melhor_fornecedor.toLowerCase().includes(termo),
+      )
+    : rows
 
   return (
-    <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-      <div className="px-5 py-4 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3">
+    <section className="painel">
+      <div className="painel-topo">
         <div>
-          <h3 className="font-semibold text-slate-900">Comparativo de Insumos</h3>
-          <p className="text-xs text-slate-400 mt-0.5">{rows.length} insumos com cotações disponíveis</p>
+          <h2 className="painel-titulo">Melhor oferta por insumo</h2>
+          <p className="text-[12.5px] text-ardosia">
+            {rows.length.toLocaleString('pt-BR')} insumo(s) com cotação vigente, preço na unidade base
+          </p>
         </div>
-        <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Buscar insumo ou fornecedor..."
-          className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 w-64"
-        />
+        <div className="relative w-full sm:w-72">
+          <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ardosia-2" />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Filtrar por insumo, CAS ou fornecedor"
+            aria-label="Filtrar insumos"
+            className="campo campo-sm pl-8"
+          />
+        </div>
       </div>
 
       {filtered.length === 0 ? (
-        <div className="px-5 py-12 text-center text-slate-400 text-sm">
-          {rows.length === 0
-            ? 'Nenhum insumo com cotações. Cadastre cotações para começar.'
-            : 'Nenhum resultado para esta busca.'}
-        </div>
+        <Vazio
+          embutido
+          icone={Package}
+          titulo={rows.length === 0 ? 'Nenhuma cotação vigente' : 'Nada encontrado'}
+          texto={
+            rows.length === 0
+              ? 'Lance uma cotação e vincule os itens aos insumos para ver a comparação aqui.'
+              : `Nenhum insumo, CAS ou fornecedor corresponde a “${search.trim()}”.`
+          }
+          acao={
+            rows.length === 0 && (
+              <Link href="/cotacoes/nova" className="btn btn-secundario btn-sm">
+                Nova cotação
+              </Link>
+            )
+          }
+        />
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="tabela">
             <thead>
-              <tr className="bg-slate-50/70 border-b border-slate-100">
-                <th className="text-left px-4 py-3 font-medium text-slate-500">Insumo</th>
-                <th className="text-left px-4 py-3 font-medium text-slate-500">Melhor Fornecedor</th>
-                <th className="text-right px-4 py-3 font-medium text-slate-500">Melhor Preço</th>
-                <th className="text-right px-4 py-3 font-medium text-slate-500">2º Preço</th>
-                <th className="text-right px-4 py-3 font-medium text-slate-500">Diferença</th>
-                <th className="text-center px-4 py-3 font-medium text-slate-500">Entrega</th>
-                <th className="text-center px-4 py-3 font-medium text-slate-500">Validade</th>
-                <th className="text-center px-4 py-3 font-medium text-slate-500">Score</th>
-                <th className="px-4 py-3" />
+              <tr>
+                <th>Insumo</th>
+                <th>Melhor oferta</th>
+                <th className="num">Preço</th>
+                <th className="num">2º menor</th>
+                <th className="num">Diferença</th>
+                <th className="num">Entrega</th>
+                <th>Validade lote</th>
+                <th className="w-10">
+                  <span className="sr-only">Abrir cotação</span>
+                </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-50">
+            <tbody>
               {filtered.map((row) => (
-                <tr key={row.insumo_id} className="hover:bg-slate-50/60 transition-colors">
-                  <td className="px-4 py-3">
-                    <p className="font-medium text-slate-800">{row.insumo_nome}</p>
-                    {row.cas_number && (
-                      <p className="text-[11px] text-slate-400 font-mono">CAS {row.cas_number}</p>
-                    )}
+                <tr key={row.insumo_id}>
+                  <td className="min-w-[200px]">
+                    <p className="font-medium">{row.insumo_nome}</p>
+                    {row.cas_number && <p className="leitura text-[11.5px] text-ardosia">CAS {row.cas_number}</p>}
                   </td>
-                  <td className="px-4 py-3 text-slate-600">{row.melhor_fornecedor}</td>
-                  <td className="px-4 py-3 text-right font-mono font-semibold text-slate-900">
-                    {formatarPrecoBase({ valor: row.melhor_preco, base: row.unidade })}
-                  </td>
-                  <td className="px-4 py-3 text-right font-mono text-slate-400">
-                    {row.segundo_preco != null ? formatarPrecoBase({ valor: row.segundo_preco, base: row.unidade }) : '—'}
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    {row.diferenca_pct != null ? (
-                      <span
-                        className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
-                          row.diferenca_pct > 10
-                            ? 'bg-emerald-100 text-emerald-700'
-                            : 'bg-slate-100 text-slate-500'
-                        }`}
-                      >
-                        {row.diferenca_pct.toFixed(1)}%
-                      </span>
-                    ) : (
-                      '—'
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-center text-slate-500">
-                    {row.prazo_entrega != null ? `${row.prazo_entrega}d` : '—'}
-                  </td>
-                  <td className="px-4 py-3 text-center text-slate-500 text-xs">
-                    {row.validade
-                      ? new Date(row.validade + 'T12:00:00').toLocaleDateString('pt-BR')
-                      : '—'}
-                  </td>
-                  <td className="px-4 py-3 text-center">
-                    <span
-                      className={`text-xs font-bold px-2 py-0.5 rounded-full ${scoreBadgeClass(row.score)}`}
-                    >
-                      {(row.score * 100).toFixed(0)}
+                  <td className="whitespace-nowrap">
+                    <span className="inline-flex items-center gap-2">
+                      <span className="h-3.5 w-[3px] rounded-full bg-ambar" aria-hidden="true" />
+                      {row.melhor_fornecedor}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-right">
+                  <td className="num">
+                    <LeituraPreco valor={row.melhor_preco} base={row.unidade} className="font-medium" />
+                  </td>
+                  <td className="num text-ardosia">
+                    {row.segundo_preco != null ? <LeituraPreco valor={row.segundo_preco} base={row.unidade} /> : '—'}
+                  </td>
+                  <td className="num">
+                    {row.diferenca_pct != null ? (
+                      <span className="leitura text-[12.5px]">
+                        +{row.diferenca_pct.toFixed(1).replace('.', ',')}%
+                      </span>
+                    ) : (
+                      <span className="text-ardosia-2">único</span>
+                    )}
+                  </td>
+                  <td className="num text-ardosia">{row.prazo_entrega != null ? `${row.prazo_entrega} d` : '—'}</td>
+                  <td className="whitespace-nowrap text-ardosia">
+                    {row.validade ? new Date(row.validade + 'T12:00:00').toLocaleDateString('pt-BR') : '—'}
+                  </td>
+                  <td>
                     <Link
                       href={`/cotacoes/${row.melhor_cotacao_id}`}
-                      className="text-blue-400 hover:text-blue-600 transition-colors"
+                      className="btn btn-fantasma btn-icone btn-sm"
+                      aria-label={`Abrir a cotação de ${row.melhor_fornecedor}`}
+                      title="Abrir cotação"
                     >
-                      <ExternalLink size={14} />
+                      <ArrowUpRight size={15} />
                     </Link>
                   </td>
                 </tr>
@@ -134,6 +139,6 @@ export function ComparativoTable({ rows }: { rows: ComparativoRow[] }) {
           </table>
         </div>
       )}
-    </div>
+    </section>
   )
 }

@@ -22,10 +22,10 @@ export function AprovarMapaButton({ id, action }: Props) {
         })
       }}
       disabled={pending}
-      className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-green-700 bg-green-50 border border-green-200 rounded-lg hover:bg-green-100 disabled:opacity-50 transition-colors"
+      className="btn btn-primario btn-sm"
     >
-      <CheckCircle size={15} />
-      {pending ? 'Aprovando...' : 'Aprovar mapa'}
+      {pending ? <span className="girador" aria-hidden="true" /> : <CheckCircle size={14} />}
+      {pending ? 'Aprovando…' : 'Aprovar mapa'}
     </button>
   )
 }

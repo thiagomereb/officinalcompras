@@ -1,8 +1,10 @@
 ﻿import Link from 'next/link'
-import { ChevronLeft, FileText, Plus } from 'lucide-react'
+import { FileText } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { PesosEditor } from '@/components/mapas/PesosEditor'
 import { NovoMapaForm } from '@/components/mapas/NovoMapaForm'
+import { Cabecalho } from '@/components/ui/Cabecalho'
+import { Vazio } from '@/components/ui/Vazio'
 import { PESOS_PADRAO } from '@/lib/comparacao'
 import { criarMapa } from '../actions'
 
@@ -10,95 +12,91 @@ export default async function NovoMapaPage() {
   const supabase = await createClient()
   const { data: cotacoes } = await supabase
     .from('cotacoes')
-    .select('id, data_cotacao, fornecedores(razao_social, nome_fantasia), cotacao_itens(id)')
+    .select('id, data_cotacao, validade_cotacao, fornecedores(razao_social, nome_fantasia), cotacao_itens(id)')
     .eq('status', 'processado')
     .order('data_cotacao', { ascending: false })
 
+  const hoje = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date())
+
   return (
-    <div className="p-8">
-      <div className="mb-8">
-        <Link href="/mapas" className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 mb-4">
-          <ChevronLeft size={16} />
-          Voltar para mapas
-        </Link>
-        <h2 className="text-2xl font-bold text-gray-900">Novo Mapa de Cotação</h2>
-        <p className="text-gray-500 mt-1">Selecione as cotações e configure os pesos do algoritmo de comparação.</p>
-      </div>
+    <div className="pagina">
+      <Cabecalho
+        voltar={{ href: '/mapas', label: 'Mapas de cotação' }}
+        titulo="Novo mapa de cotação"
+        descricao="Escolha as cotações que vão disputar e quanto pesa cada critério."
+      />
 
       {!cotacoes?.length ? (
-        <div className="bg-white rounded-xl border border-gray-200 p-12 text-center max-w-lg">
-          <FileText size={40} className="mx-auto text-gray-300 mb-4" />
-          <h3 className="font-semibold text-gray-900 mb-2">Nenhuma cotação com itens lançados</h3>
-          <p className="text-gray-500 text-sm mb-2">
-            Para criar um mapa de comparação você precisa ter cotações com itens registrados.
-          </p>
-          <p className="text-gray-400 text-sm mb-6">
-            Abra uma cotação existente e adicione pelo menos um item de preço.
-          </p>
-          <div className="flex gap-3 justify-center">
-            <Link
-              href="/cotacoes/nova"
-              className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
-            >
-              <Plus size={16} />
-              Nova cotação
-            </Link>
-            <Link
-              href="/cotacoes"
-              className="inline-flex items-center gap-2 px-4 py-2.5 border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50 transition-colors"
-            >
-              Ver cotações
-            </Link>
-          </div>
-        </div>
+        <Vazio
+          icone={FileText}
+          titulo="Nenhuma cotação com itens"
+          texto="O mapa compara itens já lançados. Abra uma cotação e extraia ou adicione os itens primeiro."
+          acao={
+            <>
+              <Link href="/cotacoes" className="btn btn-secundario btn-sm">
+                Ver cotações
+              </Link>
+              <Link href="/cotacoes/nova" className="btn btn-primario btn-sm">
+                Nova cotação
+              </Link>
+            </>
+          }
+        />
       ) : (
         <NovoMapaForm action={criarMapa}>
-          {/* Título */}
-          <div className="bg-white rounded-xl border border-gray-200 p-6">
-            <h3 className="text-sm font-semibold text-gray-700 mb-4">Identificação</h3>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Título do Mapa <span className="text-red-500">*</span>
+          <section className="painel p-5 lg:p-6">
+            <label htmlFor="mapa-titulo" className="legenda">
+              Título <span className="obrigatorio">*</span>
             </label>
             <input
+              id="mapa-titulo"
               name="titulo"
               required
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="Ex: Compras Maio/2026 — Lote 1"
+              className="campo"
+              placeholder="Compras de novembro — lote 1"
             />
-          </div>
+          </section>
 
-          {/* Cotações */}
-          <div className="bg-white rounded-xl border border-gray-200 p-6">
-            <h3 className="text-sm font-semibold text-gray-700 mb-1">Cotações para comparar</h3>
-            <p className="text-xs text-gray-400 mb-4">Selecione uma ou mais cotações com itens lançados.</p>
-            <div className="space-y-2">
+          <section className="painel">
+            <div className="painel-topo">
+              <div>
+                <h2 className="painel-titulo">Cotações</h2>
+                <p className="text-[12.5px] text-ardosia">Só aparecem cotações com itens lançados.</p>
+              </div>
+            </div>
+            <ul>
               {cotacoes.map((c) => {
                 const fornecedor = c.fornecedores as { razao_social: string; nome_fantasia: string | null } | null
                 const totalItens = (c.cotacao_itens as { id: string }[])?.length ?? 0
+                const vencida = !!c.validade_cotacao && c.validade_cotacao < hoje
                 return (
-                  <label key={c.id} className="flex items-center gap-3 p-3 rounded-lg border border-gray-200 hover:bg-gray-50 cursor-pointer">
-                    <input type="checkbox" name="cotacoes_ids" value={c.id} className="w-4 h-4 rounded border-gray-300 text-blue-600" />
-                    <div className="flex-1">
-                      <p className="text-sm font-medium text-gray-800">
-                        {fornecedor?.nome_fantasia ?? fornecedor?.razao_social ?? '—'}
-                      </p>
-                      <p className="text-xs text-gray-400">
-                        {new Date(c.data_cotacao + 'T12:00:00').toLocaleDateString('pt-BR')} · {totalItens} item(s)
-                      </p>
-                    </div>
-                  </label>
+                  <li key={c.id} className="border-b border-linha-2 last:border-0">
+                    <label className="flex cursor-pointer items-center gap-3 px-5 py-3 transition-colors hover:bg-nevoa/60 has-[:checked]:bg-ambar-veu/50">
+                      <input type="checkbox" name="cotacoes_ids" value={c.id} />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-[13.5px] font-medium">
+                          {fornecedor?.nome_fantasia ?? fornecedor?.razao_social ?? '—'}
+                        </span>
+                        <span className="block text-[12.5px] text-ardosia">
+                          {new Date(c.data_cotacao + 'T12:00:00').toLocaleDateString('pt-BR')} · {totalItens} item(ns)
+                        </span>
+                      </span>
+                      {vencida && <span className="selo selo-alerta">vencida</span>}
+                    </label>
+                  </li>
                 )
               })}
-            </div>
-          </div>
+            </ul>
+          </section>
 
-          {/* Pesos */}
-          <div className="bg-white rounded-xl border border-gray-200 p-6">
-            <h3 className="text-sm font-semibold text-gray-700 mb-1">Pesos do Algoritmo</h3>
-            <p className="text-xs text-gray-400 mb-4">A soma dos pesos deve ser 100%. Ajuste conforme a prioridade da sua farmácia.</p>
+          <section className="painel p-5 lg:p-6">
+            <h2 className="painel-titulo">Pesos dos critérios</h2>
+            <p className="mb-5 text-[12.5px] text-ardosia">
+              Somam 100%. Dentro de cada insumo, quem tem o melhor valor num critério leva o peso inteiro dele, e o pior
+              leva zero.
+            </p>
             <PesosEditor inicial={PESOS_PADRAO} />
-          </div>
-
+          </section>
         </NovoMapaForm>
       )}
     </div>

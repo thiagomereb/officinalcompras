@@ -1,33 +1,31 @@
 'use client'
 
-import { useActionState, useState } from 'react'
-import { Plus } from 'lucide-react'
-import type { Tables } from '@/types/database'
+import { useActionState, useEffect, useRef, useState } from 'react'
+import { Plus, X } from 'lucide-react'
 import type { Falha } from '@/lib/acoes'
-
-type Insumo = Pick<Tables<'insumos'>, 'id' | 'nome_padrao'>
+import { BuscaInsumo } from '@/components/ui/BuscaInsumo'
 
 interface Props {
   cotacaoId: string
-  insumos: Insumo[]
   action: (cotacaoId: string, formData: FormData) => Promise<Falha | void>
 }
 
 const UNIDADES: { value: string; label: string }[] = [
-  { value: 'mg', label: 'mg — Miligrama' },
-  { value: 'g', label: 'g — Grama' },
-  { value: 'kg', label: 'kg — Quilograma' },
-  { value: 'mcg', label: 'mcg — Micrograma' },
-  { value: 'mL', label: 'mL — Mililitro' },
-  { value: 'L', label: 'L — Litro' },
-  { value: 'UI', label: 'UI — Unidade Internacional' },
-  { value: 'un', label: 'un — Unidade' },
-  { value: 'cáps', label: 'cáps — Cápsula' },
-  { value: 'comp', label: 'comp — Comprimido' },
+  { value: 'mg', label: 'mg — miligrama' },
+  { value: 'g', label: 'g — grama' },
+  { value: 'kg', label: 'kg — quilograma' },
+  { value: 'mcg', label: 'mcg — micrograma' },
+  { value: 'mL', label: 'mL — mililitro' },
+  { value: 'L', label: 'L — litro' },
+  { value: 'UI', label: 'UI — unidade internacional' },
+  { value: 'un', label: 'un — unidade' },
+  { value: 'cáps', label: 'cáps — cápsula' },
+  { value: 'comp', label: 'comp — comprimido' },
 ]
 
-export function AdicionarItemForm({ cotacaoId, insumos, action }: Props) {
+export function AdicionarItemForm({ cotacaoId, action }: Props) {
   const [aberto, setAberto] = useState(false)
+  const dialogo = useRef<HTMLDivElement>(null)
 
   const boundAction = action.bind(null, cotacaoId)
   const [error, formAction, pending] = useActionState(
@@ -44,184 +42,167 @@ export function AdicionarItemForm({ cotacaoId, insumos, action }: Props) {
     null
   )
 
+  useEffect(() => {
+    if (aberto) dialogo.current?.querySelector<HTMLInputElement>('input[name="descricao_original"]')?.focus()
+  }, [aberto])
+
   if (!aberto) {
     return (
-      <button
-        onClick={() => setAberto(true)}
-        className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
-      >
-        <Plus size={16} />
+      <button onClick={() => setAberto(true)} className="btn btn-secundario btn-sm">
+        <Plus size={15} />
         Adicionar item
       </button>
     )
   }
 
+  const campo = (id: string) => `novo-item-${id}`
+
   return (
-    <div className="bg-gray-50 rounded-xl border border-gray-200 p-5">
-      <h4 className="text-sm font-semibold text-gray-700 mb-4">Novo Item</h4>
-      <form action={formAction} className="space-y-4">
-        {error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded-lg text-sm">
-            {error}
-          </div>
-        )}
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div className="sm:col-span-2">
-            <label className="block text-xs font-medium text-gray-600 mb-1">
-              Descrição original <span className="text-red-500">*</span>
-            </label>
-            <input
-              name="descricao_original"
-              required
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="Como aparece na tabela do fornecedor"
-            />
-          </div>
-
-          <div className="sm:col-span-2">
-            <label className="block text-xs font-medium text-gray-600 mb-1">Insumo correspondente</label>
-            <select
-              name="insumo_id"
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">— Não vinculado —</option>
-              {insumos.map((i) => (
-                <option key={i.id} value={i.id}>{i.nome_padrao}</option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">
-              Preço Unitário (R$) <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="number"
-              name="preco_unitario"
-              required
-              min="0"
-              step="0.0001"
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="0,0000"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Unidade</label>
-            <select
-              name="unidade"
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">—</option>
-              {UNIDADES.map((u) => <option key={u.value} value={u.value}>{u.label}</option>)}
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Quantidade</label>
-            <input
-              type="number"
-              name="quantidade"
-              min="0"
-              step="0.001"
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="Ex: 100"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Qtd. Mínima embalagem</label>
-            <input
-              type="number"
-              name="quantidade_minima"
-              min="0"
-              step="0.001"
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="Ex: 100"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">País de Origem</label>
-            <input
-              name="pais_origem"
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="Ex: Brasil"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">IPI (%)</label>
-            <input
-              type="number"
-              name="ipi"
-              min="0"
-              max="100"
-              step="0.01"
-              defaultValue="0"
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">ST (%)</label>
-            <input
-              type="number"
-              name="st"
-              min="0"
-              max="100"
-              step="0.01"
-              defaultValue="0"
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">CAS</label>
-            <input
-              name="cas"
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="Ex: 50-00-0"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Lote</label>
-            <input
-              name="lote"
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="Ex: L2024001"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Validade</label>
-            <input
-              type="date"
-              name="validade"
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-        </div>
-
-        <div className="flex gap-2 pt-1">
-          <button
-            type="submit"
-            disabled={pending}
-            className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
-          >
-            {pending ? 'Salvando...' : 'Salvar item'}
-          </button>
-          <button
-            type="button"
-            onClick={() => setAberto(false)}
-            className="px-4 py-2 text-sm text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-          >
-            Cancelar
+    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-4">
+      <div className="absolute inset-0 bg-grafite/40" onClick={() => !pending && setAberto(false)} aria-hidden="true" />
+      <div
+        ref={dialogo}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="titulo-novo-item"
+        onKeyDown={(e) => {
+          if (e.key === 'Escape' && !pending) setAberto(false)
+        }}
+        className="relative flex max-h-[92dvh] w-full max-w-2xl flex-col rounded-t-2xl bg-papel shadow-2xl shadow-grafite/20 sm:rounded-2xl"
+      >
+        <div className="flex items-center justify-between border-b border-linha-2 px-6 py-4">
+          <h2 id="titulo-novo-item" className="titulo text-[18px]">
+            Adicionar item
+          </h2>
+          <button onClick={() => setAberto(false)} className="btn btn-fantasma btn-icone btn-sm" aria-label="Fechar">
+            <X size={16} />
           </button>
         </div>
-      </form>
+
+        <form action={formAction} className="flex min-h-0 flex-1 flex-col">
+          <div className="grid flex-1 grid-cols-1 gap-x-4 gap-y-4 overflow-y-auto px-6 py-5 sm:grid-cols-2">
+            {error && (
+              <p className="aviso aviso-erro sm:col-span-2" role="alert">
+                {error}
+              </p>
+            )}
+
+            <div className="sm:col-span-2">
+              <label htmlFor={campo('descricao')} className="legenda">
+                Descrição <span className="obrigatorio">*</span>
+              </label>
+              <input
+                id={campo('descricao')}
+                name="descricao_original"
+                required
+                className="campo"
+                placeholder="Como aparece na tabela do fornecedor"
+              />
+            </div>
+
+            <div className="sm:col-span-2">
+              <span className="legenda">Insumo correspondente</span>
+              <BuscaInsumo name="insumo_id" />
+              <p className="ajuda">Sem escolha, o sistema tenta vincular pelo nome da descrição.</p>
+            </div>
+
+            <div>
+              <label htmlFor={campo('preco')} className="legenda">
+                Preço unitário (R$) <span className="obrigatorio">*</span>
+              </label>
+              <input
+                id={campo('preco')}
+                type="number"
+                name="preco_unitario"
+                required
+                min="0"
+                step="0.0001"
+                className="campo leitura"
+                placeholder="0,00"
+              />
+            </div>
+
+            <div>
+              <label htmlFor={campo('unidade')} className="legenda">Unidade</label>
+              <select id={campo('unidade')} name="unidade" className="campo">
+                <option value="">—</option>
+                {UNIDADES.map((u) => (
+                  <option key={u.value} value={u.value}>
+                    {u.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label htmlFor={campo('embalagem')} className="legenda">Tamanho da embalagem</label>
+              <input
+                id={campo('embalagem')}
+                type="number"
+                name="quantidade_minima"
+                min="0"
+                step="0.001"
+                className="campo"
+                placeholder="100"
+              />
+              <p className="ajuda">Na unidade escolhida: 100 para “100 g”.</p>
+            </div>
+
+            <div>
+              <label htmlFor={campo('quantidade')} className="legenda">Quantidade</label>
+              <input
+                id={campo('quantidade')}
+                type="number"
+                name="quantidade"
+                min="0"
+                step="0.001"
+                className="campo"
+                placeholder="1"
+              />
+            </div>
+
+            <div>
+              <label htmlFor={campo('ipi')} className="legenda">IPI (%)</label>
+              <input id={campo('ipi')} type="number" name="ipi" min="0" max="100" step="0.01" defaultValue="0" className="campo" />
+            </div>
+
+            <div>
+              <label htmlFor={campo('st')} className="legenda">ST (%)</label>
+              <input id={campo('st')} type="number" name="st" min="0" max="100" step="0.01" defaultValue="0" className="campo" />
+            </div>
+
+            <div>
+              <label htmlFor={campo('cas')} className="legenda">CAS</label>
+              <input id={campo('cas')} name="cas" className="campo leitura" placeholder="50-81-7" />
+            </div>
+
+            <div>
+              <label htmlFor={campo('origem')} className="legenda">País de origem</label>
+              <input id={campo('origem')} name="pais_origem" className="campo" placeholder="Brasil" />
+            </div>
+
+            <div>
+              <label htmlFor={campo('lote')} className="legenda">Lote</label>
+              <input id={campo('lote')} name="lote" className="campo leitura" placeholder="L2024001" />
+            </div>
+
+            <div>
+              <label htmlFor={campo('validade')} className="legenda">Validade do lote</label>
+              <input id={campo('validade')} type="date" name="validade" className="campo" />
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-2 border-t border-linha-2 bg-nevoa/60 px-6 py-3.5 sm:rounded-b-2xl">
+            <button type="button" onClick={() => setAberto(false)} className="btn btn-secundario" disabled={pending}>
+              Cancelar
+            </button>
+            <button type="submit" disabled={pending} className="btn btn-primario">
+              {pending && <span className="girador" aria-hidden="true" />}
+              {pending ? 'Salvando…' : 'Salvar item'}
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   )
 }

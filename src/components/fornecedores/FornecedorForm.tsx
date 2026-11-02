@@ -44,105 +44,107 @@ export function FornecedorForm({ fornecedor, action }: Props) {
   )
 
   return (
-    <form action={formAction} className="space-y-6 max-w-2xl">
+    <form action={formAction} className="space-y-6">
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
+        <p className="aviso aviso-erro" role="alert">
           {error}
-        </div>
+        </p>
       )}
 
-      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-x-5 gap-y-5 sm:grid-cols-2">
         <div className="sm:col-span-2">
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Razão Social <span className="text-red-500">*</span>
+          <label htmlFor="f-razao" className="legenda">
+            Razão social <span className="obrigatorio">*</span>
           </label>
           <input
+            id="f-razao"
             name="razao_social"
             required
             defaultValue={fornecedor?.razao_social}
-            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="campo"
             placeholder="Nome jurídico completo"
           />
         </div>
 
         <div className="sm:col-span-2">
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Nome Fantasia
-          </label>
+          <label htmlFor="f-fantasia" className="legenda">Nome fantasia</label>
           <input
+            id="f-fantasia"
             name="nome_fantasia"
             defaultValue={fornecedor?.nome_fantasia ?? ''}
-            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="campo"
             placeholder="Como o fornecedor é conhecido"
           />
+          <p className="ajuda">É o nome que aparece nas cotações e nos mapas.</p>
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">CNPJ</label>
+          <label htmlFor="f-cnpj" className="legenda">CNPJ</label>
           <input
+            id="f-cnpj"
             name="cnpj"
+            inputMode="numeric"
             defaultValue={fornecedor?.cnpj ?? ''}
-            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="campo leitura"
             placeholder="00.000.000/0000-00"
             onChange={(e) => { e.target.value = formatarCNPJ(e.target.value) }}
           />
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Telefone</label>
+          <label htmlFor="f-telefone" className="legenda">Telefone</label>
           <input
+            id="f-telefone"
             name="telefone"
+            inputMode="tel"
             defaultValue={fornecedor?.telefone ?? ''}
-            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="campo leitura"
             placeholder="(00) 00000-0000"
             onChange={(e) => { e.target.value = formatarTelefone(e.target.value) }}
           />
         </div>
 
         <div className="sm:col-span-2">
-          <label className="block text-sm font-medium text-gray-700 mb-1">E-mail</label>
+          <label htmlFor="f-email" className="legenda">E-mail</label>
           <input
+            id="f-email"
             name="email"
             type="email"
             defaultValue={fornecedor?.email ?? ''}
-            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="campo"
             placeholder="contato@fornecedor.com.br"
           />
         </div>
 
         {fornecedor && (
           <div className="sm:col-span-2">
-            <label className="flex items-center gap-3 cursor-pointer">
-              <input
-                type="hidden"
-                name="ativo"
-                value="false"
-              />
+            {/* O hidden garante que "desmarcado" também chegue à action */}
+            <input type="hidden" name="ativo" value="false" />
+            <label className="flex cursor-pointer items-start gap-3">
               <input
                 type="checkbox"
                 name="ativo"
                 value="true"
                 defaultChecked={fornecedor.ativo ?? true}
-                className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                className="mt-0.5"
               />
-              <span className="text-sm font-medium text-gray-700">Fornecedor ativo</span>
+              <span>
+                <span className="block text-[13.5px] font-medium">Fornecedor ativo</span>
+                <span className="block text-[12.5px] text-ardosia">
+                  Inativo some da lista de novas cotações, mas o histórico dele continua.
+                </span>
+              </span>
             </label>
           </div>
         )}
       </div>
 
-      <div className="flex gap-3 pt-2">
-        <button
-          type="submit"
-          disabled={pending}
-          className="px-5 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-        >
-          {pending ? 'Salvando...' : fornecedor ? 'Salvar alterações' : 'Cadastrar fornecedor'}
+      <div className="flex flex-wrap gap-2 pt-1">
+        <button type="submit" disabled={pending} className="btn btn-primario">
+          {pending && <span className="girador" aria-hidden="true" />}
+          {pending ? 'Salvando…' : fornecedor ? 'Salvar alterações' : 'Cadastrar fornecedor'}
         </button>
-        <Link
-          href="/fornecedores"
-          className="px-5 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-        >
+        <Link href="/fornecedores" className="btn btn-secundario">
           Cancelar
         </Link>
       </div>
