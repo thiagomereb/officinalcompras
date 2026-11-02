@@ -29,3 +29,15 @@ export async function getArquivosSignedUrls(
   })
   return map
 }
+
+// Remoção de melhor esforço: um arquivo órfão no storage não deve impedir a
+// exclusão do registro que apontava para ele.
+export async function removerArquivos(
+  supabase: SupabaseClient<Database>,
+  paths: (string | null)[]
+): Promise<void> {
+  const validos = paths.filter((p): p is string => !!p)
+  if (!validos.length) return
+  const { error } = await supabase.storage.from(BUCKET).remove(validos)
+  if (error) console.warn(`[storage] não foi possível remover ${validos.join(', ')}: ${error.message}`)
+}

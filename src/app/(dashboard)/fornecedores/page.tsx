@@ -29,7 +29,7 @@ export default async function FornecedoresPage() {
         <div className="text-center py-16 bg-white rounded-xl border border-gray-200">
           <Building2 size={40} className="mx-auto text-gray-300 mb-4" />
           <p className="text-gray-500 font-medium">Nenhum fornecedor cadastrado</p>
-          <p className="text-gray-400 text-sm mt-1">Clique em "Novo fornecedor" para começar</p>
+          <p className="text-gray-400 text-sm mt-1">Clique em &ldquo;Novo fornecedor&rdquo; para começar</p>
         </div>
       ) : (
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">

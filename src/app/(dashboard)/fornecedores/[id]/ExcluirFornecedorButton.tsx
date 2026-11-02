@@ -3,10 +3,11 @@
 import { useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Trash2 } from 'lucide-react'
+import type { Falha } from '@/lib/acoes'
 
 interface Props {
   id: string
-  action: (id: string) => Promise<void>
+  action: (id: string) => Promise<Falha | void>
 }
 
 export function ExcluirFornecedorButton({ id, action }: Props) {
@@ -17,7 +18,11 @@ export function ExcluirFornecedorButton({ id, action }: Props) {
     if (!confirm('Tem certeza que deseja excluir este fornecedor? Esta ação não pode ser desfeita.')) return
 
     startTransition(async () => {
-      await action(id)
+      const resultado = await action(id)
+      if (resultado?.erro) {
+        alert(resultado.erro)
+        return
+      }
       router.push('/fornecedores')
     })
   }

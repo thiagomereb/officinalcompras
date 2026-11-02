@@ -81,7 +81,7 @@ export default async function RelatoriosPage() {
             <p className="text-sm font-medium text-amber-800">Exportação em CSV/Excel em breve</p>
             <p className="text-xs text-amber-600 mt-0.5">
               Por enquanto, acesse os Mapas aprovados para imprimir ou salvar em PDF individualmente
-              via o botão "Imprimir / Salvar PDF" em cada mapa.
+              via o botão &ldquo;Imprimir / Salvar PDF&rdquo; em cada mapa.
             </p>
           </div>
         </div>

@@ -3,13 +3,14 @@
 import { useActionState, useState } from 'react'
 import { Plus } from 'lucide-react'
 import type { Tables } from '@/types/database'
+import type { Falha } from '@/lib/acoes'
 
 type Insumo = Pick<Tables<'insumos'>, 'id' | 'nome_padrao'>
 
 interface Props {
   cotacaoId: string
   insumos: Insumo[]
-  action: (cotacaoId: string, formData: FormData) => Promise<void>
+  action: (cotacaoId: string, formData: FormData) => Promise<Falha | void>
 }
 
 const UNIDADES: { value: string; label: string }[] = [
@@ -32,7 +33,8 @@ export function AdicionarItemForm({ cotacaoId, insumos, action }: Props) {
   const [error, formAction, pending] = useActionState(
     async (_: string | null, formData: FormData) => {
       try {
-        await boundAction(formData)
+        const resultado = await boundAction(formData)
+        if (resultado?.erro) return resultado.erro
         setAberto(false)
         return null
       } catch (e) {

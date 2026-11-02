@@ -1,6 +1,8 @@
 ﻿import { notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
-import { calcularScores, agruparPorInsumo, PESOS_PADRAO, type Pesos, type CandidatoItem } from '@/lib/comparacao'
+import { PESOS_PADRAO, type Pesos } from '@/lib/comparacao'
+import { carregarGruposMapa } from '@/lib/mapas'
+import { formatarPrecoBase } from '@/lib/unidades'
 import { PrintButton } from './PrintButton'
 
 function formatDate(d: string | null) {
@@ -17,55 +19,13 @@ export default async function ImprimirMapaPage({ params }: { params: Promise<{ i
 
   const pesos: Pesos = (mapa.pesos as Pesos) ?? PESOS_PADRAO
 
-  const [cotacoesRes, itensRes, selecoesRes] = await Promise.all([
-    supabase
-      .from('cotacoes')
-      .select('id, prazo_entrega_dias, prazo_pagamento_dias, frete_fixo, frete_gratis_acima, pedido_minimo, fornecedores(razao_social, nome_fantasia)')
-      .in('id', mapa.cotacoes_ids),
-    supabase
-      .from('cotacao_itens')
-      .select('id, cotacao_id, insumo_id, preco_unitario, unidade, quantidade_minima, lote, validade, insumos(nome_padrao)')
-      .in('cotacao_id', mapa.cotacoes_ids)
-      .not('insumo_id', 'is', null),
+  const [grupos, selecoesRes] = await Promise.all([
+    carregarGruposMapa(supabase, mapa.cotacoes_ids, pesos),
     supabase
       .from('mapa_cotacao_itens')
       .select('insumo_id, cotacao_item_id, quantidade')
       .eq('mapa_id', id),
   ])
-
-  const condicoesPorCotacao = new Map(
-    (cotacoesRes.data ?? []).map((c) => {
-      const f = c.fornecedores as { razao_social: string; nome_fantasia: string | null } | null
-      return [c.id, { ...c, fornecedor_nome: f?.nome_fantasia ?? f?.razao_social ?? '—' }]
-    })
-  )
-
-  const candidatosSemScore: Omit<CandidatoItem, 'score'>[] = (itensRes.data ?? [])
-    .filter((item) => item.insumo_id)
-    .map((item) => {
-      const cond = condicoesPorCotacao.get(item.cotacao_id)
-      const insumo = item.insumos as { nome_padrao: string } | null
-      return {
-        cotacao_item_id: item.id,
-        cotacao_id: item.cotacao_id,
-        insumo_id: item.insumo_id!,
-        insumo_nome: insumo?.nome_padrao ?? '—',
-        fornecedor_nome: cond?.fornecedor_nome ?? '—',
-        preco_unitario: item.preco_unitario,
-        unidade: item.unidade,
-        quantidade_minima: item.quantidade_minima,
-        lote: item.lote,
-        validade: item.validade,
-        prazo_entrega_dias: cond?.prazo_entrega_dias ?? null,
-        prazo_pagamento_dias: cond?.prazo_pagamento_dias ?? null,
-        frete_fixo: cond?.frete_fixo ?? null,
-        frete_gratis_acima: cond?.frete_gratis_acima ?? null,
-        pedido_minimo: cond?.pedido_minimo ?? null,
-      }
-    })
-
-  const candidatos = calcularScores(candidatosSemScore, pesos)
-  const grupos = agruparPorInsumo(candidatos)
 
   const selecoesMapa = new Map(
     (selecoesRes.data ?? []).map((s) => [s.insumo_id, s])
@@ -118,6 +78,7 @@ export default async function ImprimirMapaPage({ params }: { params: Promise<{ i
                     <th className="text-left border border-gray-300 px-3 py-1.5 font-semibold">Fornecedor</th>
                     <th className="text-right border border-gray-300 px-3 py-1.5 font-semibold">Preço Unit.</th>
                     <th className="text-center border border-gray-300 px-3 py-1.5 font-semibold">Unid.</th>
+                    <th className="text-right border border-gray-300 px-3 py-1.5 font-semibold">Preço/base</th>
                     <th className="text-center border border-gray-300 px-3 py-1.5 font-semibold">Entrega</th>
                     <th className="text-center border border-gray-300 px-3 py-1.5 font-semibold">Pgto</th>
                     <th className="text-right border border-gray-300 px-3 py-1.5 font-semibold">Frete</th>
@@ -135,7 +96,12 @@ export default async function ImprimirMapaPage({ params }: { params: Promise<{ i
                         <td className="border border-gray-300 px-3 py-1.5 text-right font-mono">
                           {c.preco_unitario.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                         </td>
-                        <td className="border border-gray-300 px-3 py-1.5 text-center">{c.unidade ?? '—'}</td>
+                        <td className="border border-gray-300 px-3 py-1.5 text-center">
+                          {c.quantidade_minima ? `${c.quantidade_minima} ` : ''}{c.unidade ?? '—'}
+                        </td>
+                        <td className="border border-gray-300 px-3 py-1.5 text-right font-mono">
+                          {formatarPrecoBase({ valor: c.preco_base, base: c.unidade_base })}
+                        </td>
                         <td className="border border-gray-300 px-3 py-1.5 text-center">
                           {c.prazo_entrega_dias != null ? `${c.prazo_entrega_dias}d` : '—'}
                         </td>

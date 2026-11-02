@@ -1,8 +1,10 @@
 ﻿import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { ChevronLeft, Paperclip, AlertTriangle } from 'lucide-react'
+import { ChevronLeft, Paperclip, AlertTriangle, SlidersHorizontal } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { getArquivoSignedUrl } from '@/lib/supabase/storage'
+import { buscarTodos } from '@/lib/supabase/consultas'
+import { precoPorUnidadeBase } from '@/lib/unidades'
 import type { Tables } from '@/types/database'
 import { CotacaoForm } from '@/components/cotacoes/CotacaoForm'
 import { AdicionarItemForm } from '@/components/cotacoes/AdicionarItemForm'
@@ -12,7 +14,7 @@ import { VincularManualmente } from '@/components/cotacoes/VincularManualmente'
 import { ExcluirCotacaoButton } from './ExcluirCotacaoButton'
 import { OcrButton } from '@/components/cotacoes/OcrButton'
 import { LimparItensButton } from '@/components/cotacoes/LimparItensButton'
-import { AutoVincular } from '@/components/cotacoes/AutoVincular'
+import { VincularItensButton } from '@/components/cotacoes/VincularItensButton'
 
 type Cotacao = Tables<'cotacoes'>
 
@@ -21,10 +23,10 @@ function formatDate(d: string | null) {
   return new Date(d + 'T12:00:00').toLocaleDateString('pt-BR')
 }
 
-function diasAteVencer(validade: string | null) {
+function diasAteVencer(validade: string | null, hoje: Date) {
   if (!validade) return null
-  const diff = Math.ceil((new Date(validade).getTime() - Date.now()) / 86400000)
-  return diff
+  // "YYYY-MM-DD" sozinho é lido como meia-noite UTC; com horário vira data local
+  return Math.round((new Date(validade + 'T00:00:00').getTime() - hoje.getTime()) / 86400000)
 }
 
 export default async function CotacaoPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ aba?: string }> }) {
@@ -32,27 +34,36 @@ export default async function CotacaoPage({ params, searchParams }: { params: Pr
   const { aba } = await searchParams
   const supabase = await createClient()
 
-  const [cotacaoRes, fornecedoresRes, itensRes, insumosRes] = await Promise.all([
+  const [cotacaoRes, fornecedoresRes, itens, insumos] = await Promise.all([
     supabase.from('cotacoes').select('*, fornecedores(razao_social, nome_fantasia)').eq('id', id).single(),
-    supabase.from('fornecedores').select('*').eq('ativo', true).order('razao_social'),
-    supabase
-      .from('cotacao_itens')
-      .select('*, insumos(nome_padrao)')
-      .eq('cotacao_id', id)
-      .order('created_at'),
-    supabase.from('insumos').select('id, nome_padrao').order('nome_padrao'),
+    supabase.from('fornecedores').select('*').order('razao_social'),
+    buscarTodos((de, ate) =>
+      supabase
+        .from('cotacao_itens')
+        .select('*, insumos(nome_padrao)')
+        .eq('cotacao_id', id)
+        .order('created_at')
+        .order('id')
+        .range(de, ate),
+    ),
+    buscarTodos((de, ate) =>
+      supabase.from('insumos').select('id, nome_padrao').order('nome_padrao').order('id').range(de, ate),
+    ),
   ])
 
   const cotacao = cotacaoRes.data as Cotacao | null
   if (!cotacao) notFound()
 
   const fornecedor = (cotacaoRes.data as { fornecedores: { razao_social: string; nome_fantasia: string | null } | null }).fornecedores
-  const itens = itensRes.data ?? []
-  const insumos = insumosRes.data ?? []
-  const fornecedores = fornecedoresRes.data ?? []
+  // Fornecedor inativo some da lista de novas cotações, mas continua
+  // selecionável na cotação que já é dele
+  const fornecedores = (fornecedoresRes.data ?? []).filter((f) => f.ativo || f.id === cotacao.fornecedor_id)
 
   const updateAction = atualizarCotacao.bind(null, id)
-  const diasValidade = diasAteVencer(cotacao.validade_cotacao)
+  const hoje = new Date()
+  hoje.setHours(0, 0, 0, 0)
+  const diasValidade = diasAteVencer(cotacao.validade_cotacao, hoje)
+  const semVinculo = itens.filter((i) => !i.insumo_id).length
   const arquivoSignedUrl = await getArquivoSignedUrl(supabase, cotacao.arquivo_url)
 
   // Busca sinônimos para detectar duplicatas entre insumos distintos (ex: "Cafeína" e "Cafeína anidra")
@@ -76,9 +87,9 @@ export default async function CotacaoPage({ params, searchParams }: { params: Pr
     canonicalId.set(id, dono && dono !== id ? dono : id)
   }
 
-  // Preço por unidade de medida para comparação justa
+  // Preço por unidade base (R$/g, R$/mL...) para comparar embalagens diferentes
   const precoPorUnidade = (item: typeof itens[0]) =>
-    item.preco_unitario / Math.max(item.quantidade_minima ?? 1, 1)
+    precoPorUnidadeBase(item.preco_unitario, item.quantidade_minima, item.unidade).valor
 
   // Chave de agrupamento: insumo canônico (resolve sinônimos) ou descrição normalizada
   const chaveComparacao = (item: typeof itens[0]) =>
@@ -136,6 +147,25 @@ export default async function CotacaoPage({ params, searchParams }: { params: Pr
           </div>
         </div>
 
+        {/* Condições comerciais entram no score do mapa (entrega, pagamento, frete) */}
+        <details
+          className="mt-4 bg-white rounded-xl border border-gray-200"
+          open={cotacao.prazo_entrega_dias == null && cotacao.prazo_pagamento_dias == null}
+        >
+          <summary className="flex flex-wrap items-center gap-2 px-5 py-3 cursor-pointer text-sm font-medium text-gray-700 select-none">
+            <SlidersHorizontal size={15} className="text-gray-400" />
+            Condições comerciais
+            <span className="text-xs font-normal text-gray-400">
+              Entrega: {cotacao.prazo_entrega_dias != null ? `${cotacao.prazo_entrega_dias}d` : '—'}
+              {' · '}Pgto: {cotacao.prazo_pagamento_dias != null ? `${cotacao.prazo_pagamento_dias}d` : '—'}
+              {' · '}Frete: {cotacao.frete_fixo ? `R$ ${cotacao.frete_fixo.toFixed(2)}` : 'grátis'}
+            </span>
+          </summary>
+          <div className="px-5 pb-5 pt-4 border-t border-gray-100">
+            <CotacaoForm fornecedores={fornecedores} cotacao={cotacao} action={updateAction} />
+          </div>
+        </details>
+
         {diasValidade !== null && diasValidade <= 7 && (
           <div className={`mt-4 flex items-center gap-2 px-4 py-3 rounded-lg text-sm ${diasValidade < 0 ? 'bg-red-50 text-red-700' : 'bg-yellow-50 text-yellow-700'}`}>
             <AlertTriangle size={15} />
@@ -175,11 +205,11 @@ export default async function CotacaoPage({ params, searchParams }: { params: Pr
                   }`}
                 >
                   Não vinculados
-                  {itens.filter(i => !i.insumo_id).length > 0 && (
+                  {semVinculo > 0 && (
                     <span className={`text-[11px] font-semibold px-1.5 py-0.5 rounded-full ${
                       aba === 'vincular' ? 'bg-blue-100 text-blue-700' : 'bg-gray-200 text-gray-600'
                     }`}>
-                      {itens.filter(i => !i.insumo_id).length}
+                      {semVinculo}
                     </span>
                   )}
                 </Link>
@@ -187,14 +217,15 @@ export default async function CotacaoPage({ params, searchParams }: { params: Pr
             )}
           </div>
           <div className="flex items-center gap-2 flex-wrap">
+            <VincularItensButton cotacaoId={id} semVinculo={semVinculo} action={vincularItensAutomatico} />
             <LimparItensButton cotacaoId={id} totalItens={itens.length} action={removerTodosItens} />
-            <OcrButton cotacaoId={id} temArquivo={!!cotacao.arquivo_url} />
+            <OcrButton cotacaoId={id} temArquivo={!!cotacao.arquivo_url} totalItens={itens.length} />
             <AdicionarItemForm cotacaoId={id} insumos={insumos} action={adicionarItem} />
           </div>
         </div>
 
         {aba === 'vincular' ? (
-          itens.filter(i => !i.insumo_id).length === 0 ? (
+          semVinculo === 0 ? (
             <div className="text-center py-10 bg-white rounded-xl border border-dashed border-gray-300">
               <p className="text-gray-400 text-sm">Todos os itens já estão vinculados.</p>
             </div>
@@ -217,7 +248,7 @@ export default async function CotacaoPage({ params, searchParams }: { params: Pr
         ) : itens.length === 0 ? (
           <div className="text-center py-10 bg-white rounded-xl border border-dashed border-gray-300">
             <p className="text-gray-400 text-sm">Nenhum item lançado ainda.</p>
-            <p className="text-gray-300 text-xs mt-1">Clique em "Adicionar item" para começar.</p>
+            <p className="text-gray-300 text-xs mt-1">Clique em &ldquo;Adicionar item&rdquo; para começar.</p>
           </div>
         ) : (
           <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
@@ -242,7 +273,8 @@ export default async function CotacaoPage({ params, searchParams }: { params: Pr
               <tbody className="divide-y divide-gray-100">
                 {itens.map((item) => {
                   const insumo = item.insumos as { nome_padrao: string } | null
-                  const vencendo = item.validade && diasAteVencer(item.validade) !== null && diasAteVencer(item.validade)! <= 90
+                  const diasItem = diasAteVencer(item.validade, hoje)
+                  const vencendo = diasItem !== null && diasItem <= 90
                   const qtd = item.quantidade ?? 1
                   const valorTotal = qtd * item.preco_unitario
                   const ipi = item.ipi ?? 0
@@ -307,12 +339,6 @@ export default async function CotacaoPage({ params, searchParams }: { params: Pr
           </div>
         )}
       </div>
-
-      <AutoVincular
-        cotacaoId={id}
-        semVinculo={itens.filter((i) => !i.insumo_id).length}
-        action={vincularItensAutomatico}
-      />
     </div>
   )
 }

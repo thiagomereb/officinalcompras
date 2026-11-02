@@ -3,12 +3,13 @@
 import { useActionState } from 'react'
 import Link from 'next/link'
 import type { Tables } from '@/types/database'
+import type { Falha } from '@/lib/acoes'
 
 type Fornecedor = Tables<'fornecedores'>
 
 interface Props {
   fornecedor?: Fornecedor
-  action: (formData: FormData) => Promise<void>
+  action: (formData: FormData) => Promise<Falha | void>
 }
 
 function formatarCNPJ(value: string) {
@@ -33,8 +34,8 @@ export function FornecedorForm({ fornecedor, action }: Props) {
   const [error, formAction, pending] = useActionState(
     async (_: string | null, formData: FormData) => {
       try {
-        await action(formData)
-        return null
+        const resultado = await action(formData)
+        return resultado?.erro ?? null
       } catch (e) {
         return (e as Error).message
       }

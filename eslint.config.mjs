@@ -12,6 +12,10 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Saída do build da Netlify (netlify dev / deploy local)
+    ".netlify/**",
+    // Worker minificado do pdfjs, copiado de node_modules no postinstall
+    "public/pdf.worker.min.mjs",
   ]),
 ]);
 

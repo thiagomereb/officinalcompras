@@ -15,20 +15,30 @@ export type PricePoint = { date: string } & Record<string, number | string>
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899']
 
+// Preço por grama costuma ficar abaixo de R$1, onde 2 casas apagam a diferença
+function moeda(v: unknown) {
+  const n = Number(v ?? 0)
+  const casas = Math.abs(n) < 1 ? 4 : 2
+  return n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: casas, maximumFractionDigits: casas })
+}
+
 export function PriceHistoryChart({
   data,
   fornecedores,
   insumoNome,
+  unidade,
 }: {
   data: PricePoint[]
   fornecedores: string[]
   insumoNome?: string
+  unidade?: string | null
 }) {
   return (
     <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
       <h3 className="font-semibold text-slate-900 mb-0.5">Variação de Preços</h3>
       <p className="text-xs text-slate-400 mb-4">
         {insumoNome ? `Histórico: ${insumoNome}` : 'Evolução histórica por fornecedor'}
+        {unidade && ` (R$/${unidade})`}
       </p>
       {data.length < 2 ? (
         <div className="h-48 flex items-center justify-center text-slate-400 text-sm">
@@ -42,11 +52,11 @@ export function PriceHistoryChart({
             <YAxis
               tick={{ fontSize: 11 }}
               stroke="#cbd5e1"
-              tickFormatter={(v) => Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+              tickFormatter={moeda}
               width={68}
             />
             <Tooltip
-              formatter={(v) => [Number(v ?? 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }), '']}
+              formatter={(v) => [moeda(v), '']}
               contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #e2e8f0' }}
             />
             <Legend wrapperStyle={{ fontSize: 11 }} />

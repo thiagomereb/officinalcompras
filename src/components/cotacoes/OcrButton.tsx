@@ -2,45 +2,18 @@
 
 import { useRef, useState, useTransition } from 'react'
 import { Sparkles, CheckCircle, AlertCircle, Loader2, Paperclip } from 'lucide-react'
-import { prepararExtracao, uploadArquivo } from '@/app/(dashboard)/cotacoes/actions'
+import { prepararExtracao, anexarArquivo } from '@/app/(dashboard)/cotacoes/actions'
 import { concluirExtracao } from '@/lib/ocr-browser'
+import { enviarArquivoCotacao, ACCEPT_ARQUIVO_COTACAO } from '@/lib/supabase/upload'
+import { ehFalha } from '@/lib/acoes'
 
 interface Props {
   cotacaoId: string
   temArquivo: boolean
+  totalItens: number
 }
 
-async function pdfParaImagens(file: File): Promise<File[]> {
-  const pdfjsLib = await import('pdfjs-dist')
-  pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs'
-
-  const arrayBuffer = await file.arrayBuffer()
-  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise
-
-  const imagens: File[] = []
-  const baseName = file.name.replace(/\.pdf$/i, '')
-
-  for (let i = 1; i <= pdf.numPages; i++) {
-    const page = await pdf.getPage(i)
-    const viewport = page.getViewport({ scale: 2.0 })
-
-    const canvas = document.createElement('canvas')
-    canvas.width = viewport.width
-    canvas.height = viewport.height
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await (page as any).render({ canvasContext: canvas.getContext('2d')!, viewport }).promise
-
-    const blob = await new Promise<Blob>((resolve) =>
-      canvas.toBlob((b) => resolve(b!), 'image/png'),
-    )
-    imagens.push(new File([blob], `${baseName}_p${i}.png`, { type: 'image/png' }))
-  }
-
-  return imagens
-}
-
-export function OcrButton({ cotacaoId, temArquivo }: Props) {
+export function OcrButton({ cotacaoId, temArquivo, totalItens }: Props) {
   const [pending, startTransition] = useTransition()
   const [status, setStatus] = useState('')
   const [result, setResult] = useState<{ ok: boolean; msg: string } | null>(null)
@@ -58,13 +31,22 @@ export function OcrButton({ cotacaoId, temArquivo }: Props) {
     fileInputRef.current?.click()
   }
 
+  // Reextrair lê de novo o mesmo arquivo, então substitui os itens atuais em
+  // vez de somar duplicatas.
   function handleReextrair() {
+    if (
+      totalItens > 0 &&
+      !confirm(`Extrair novamente substitui os ${totalItens} itens atuais desta cotação. Continuar?`)
+    ) {
+      return
+    }
     setResult(null)
     setStatus('Extraindo com IA...')
     startTransition(async () => {
       try {
-        const preparo = await prepararExtracao(cotacaoId)
-        const count = await concluirExtracao(cotacaoId, preparo)
+        const preparo = await prepararExtracao(cotacaoId, true)
+        if (ehFalha(preparo)) throw new Error(preparo.erro)
+        const count = await concluirExtracao(cotacaoId, preparo, { substituir: true, progresso: setStatus })
         setResult({ ok: true, msg: `${count} item(s) extraído(s) com sucesso!` })
       } catch (err) {
         setResult({ ok: false, msg: (err as Error).message })
@@ -74,34 +56,21 @@ export function OcrButton({ cotacaoId, temArquivo }: Props) {
     })
   }
 
+  // Um arquivo novo traz itens novos: eles se somam aos que já existem.
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
     setResult(null)
     startTransition(async () => {
       try {
-        const isPdf = file.name.toLowerCase().endsWith('.pdf')
-        let arquivos: File[]
+        setStatus('Enviando arquivo...')
+        const path = await enviarArquivoCotacao(file, file.name)
+        const preparo = await anexarArquivo(cotacaoId, path, file.name)
+        if (ehFalha(preparo)) throw new Error(preparo.erro)
 
-        if (isPdf) {
-          setStatus('Convertendo PDF...')
-          arquivos = await pdfParaImagens(file)
-          setStatus(`Extraindo ${arquivos.length} página(s) com IA...`)
-        } else {
-          arquivos = [file]
-          setStatus('Extraindo com IA...')
-        }
-
-        let total = 0
-        for (const [i, img] of arquivos.entries()) {
-          if (arquivos.length > 1) setStatus(`Extraindo ${i + 1} de ${arquivos.length}...`)
-          const formData = new FormData()
-          formData.append('arquivo', img)
-          const preparo = await uploadArquivo(cotacaoId, formData)
-          total += await concluirExtracao(cotacaoId, preparo)
-        }
-
-        setResult({ ok: true, msg: `${total} item(s) extraído(s) com sucesso!` })
+        setStatus('Extraindo com IA...')
+        const count = await concluirExtracao(cotacaoId, preparo, { substituir: false, progresso: setStatus })
+        setResult({ ok: true, msg: `${count} item(s) extraído(s) com sucesso!` })
       } catch (err) {
         setResult({ ok: false, msg: (err as Error).message })
       } finally {
@@ -116,7 +85,7 @@ export function OcrButton({ cotacaoId, temArquivo }: Props) {
       <input
         ref={fileInputRef}
         type="file"
-        accept=".jpg,.jpeg,.png,.webp,.pdf,.xlsx,.xls"
+        accept={ACCEPT_ARQUIVO_COTACAO}
         className="hidden"
         onChange={handleFileChange}
         disabled={pending}

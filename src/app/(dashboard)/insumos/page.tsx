@@ -21,8 +21,20 @@ export default async function InsumosPage({
     .order('nome_padrao')
     .range(offset, offset + POR_PAGINA - 1)
 
-  if (q.trim()) {
-    query = query.ilike('nome_padrao', `%${q.trim()}%`)
+  // Busca também por CAS e sinônimo ("Vitamina C" acha "Ácido Ascórbico").
+  // Vírgula, parênteses e aspas têm significado na sintaxe do filtro .or() do
+  // PostgREST, então saem do termo.
+  const termo = q.trim().replace(/[,()"\\%]/g, ' ').trim()
+  if (termo) {
+    const { data: porSinonimo } = await supabase
+      .from('insumo_sinonimos')
+      .select('insumo_id')
+      .ilike('sinonimo', `%${termo}%`)
+      .limit(200)
+    const ids = [...new Set((porSinonimo ?? []).map((s) => s.insumo_id))]
+    const filtros = [`nome_padrao.ilike.%${termo}%`, `cas_number.ilike.%${termo}%`]
+    if (ids.length) filtros.push(`id.in.(${ids.join(',')})`)
+    query = query.or(filtros.join(','))
   }
 
   const { data: insumos, count } = await query
@@ -61,7 +73,7 @@ export default async function InsumosPage({
           <input
             name="q"
             defaultValue={q}
-            placeholder="Buscar por nome..."
+            placeholder="Buscar por nome, sinônimo ou CAS..."
             className="w-full pl-9 pr-4 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
         </div>
@@ -73,7 +85,7 @@ export default async function InsumosPage({
           <p className="text-gray-500 font-medium">
             {q ? `Nenhum resultado para "${q}"` : 'Nenhum insumo cadastrado'}
           </p>
-          {!q && <p className="text-gray-400 text-sm mt-1">Clique em "Novo insumo" para começar</p>}
+          {!q && <p className="text-gray-400 text-sm mt-1">Clique em &ldquo;Novo insumo&rdquo; para começar</p>}
         </div>
       ) : (
         <>

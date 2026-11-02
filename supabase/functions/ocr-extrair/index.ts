@@ -1,4 +1,4 @@
-import { createClient } from 'npm:@supabase/supabase-js'
+import { createClient } from 'npm:@supabase/supabase-js@2.105.4'
 
 const PROMPT_VISAO = `Você é um extrator especializado de tabelas de preços de insumos para farmácias de manipulação.
 Analise o documento fornecido (imagem ou PDF) e extraia todos os produtos com seus preços.
@@ -66,83 +66,18 @@ type ItemOCR = {
   cas: string | null
 }
 
-type ItemEnriquecido = ItemOCR & {
-  insumo_id: string | null
-  insumo_sugerido: string | null
-  similaridade: number | null
-}
-
-const SIMILARIDADE_MINIMA = 0.35
-
-async function matchInsumo(
-  supabase: ReturnType<typeof createClient>,
-  descricao: string,
-): Promise<{ insumo_id: string | null; insumo_sugerido: string | null; similaridade: number | null }> {
-  const { data, error } = await supabase.rpc('buscar_insumo_por_descricao', {
-    p_descricao: descricao,
-    p_limite: 1,
-  })
-
-  if (error) {
-    console.warn(`[matchInsumo] erro na busca: ${error.message}`)
-    return { insumo_id: null, insumo_sugerido: null, similaridade: null }
-  }
-
-  const melhor = data?.[0]
-  if (!melhor || melhor.similaridade < SIMILARIDADE_MINIMA) {
-    return { insumo_id: null, insumo_sugerido: null, similaridade: null }
-  }
-
-  return {
-    insumo_id: melhor.insumo_id,
-    insumo_sugerido: melhor.nome_padrao,
-    similaridade: melhor.similaridade,
-  }
-}
-
-function jaroWinkler(s1: string, s2: string): number {
-  if (s1 === s2) return 1
-  const len1 = s1.length, len2 = s2.length
-  const matchDist = Math.max(Math.floor(Math.max(len1, len2) / 2) - 1, 0)
-  const s1Matches = new Array(len1).fill(false)
-  const s2Matches = new Array(len2).fill(false)
-  let matches = 0, transpositions = 0
-  for (let i = 0; i < len1; i++) {
-    const start = Math.max(0, i - matchDist)
-    const end = Math.min(i + matchDist + 1, len2)
-    for (let j = start; j < end; j++) {
-      if (s2Matches[j] || s1[i] !== s2[j]) continue
-      s1Matches[i] = s2Matches[j] = true
-      matches++
-      break
-    }
-  }
-  if (!matches) return 0
-  let k = 0
-  for (let i = 0; i < len1; i++) {
-    if (!s1Matches[i]) continue
-    while (!s2Matches[k]) k++
-    if (s1[i] !== s2[k]) transpositions++
-    k++
-  }
-  const jaro = (matches / len1 + matches / len2 + (matches - transpositions / 2) / matches) / 3
-  let prefix = 0
-  for (let i = 0; i < Math.min(4, Math.min(len1, len2)); i++) {
-    if (s1[i] === s2[i]) prefix++; else break
-  }
-  return jaro + prefix * 0.1 * (1 - jaro)
-}
-
-
 // Por modelo. A Edge Function tem 150s de wall clock no total, então os dois
 // modelos da lista cabem numa tentativa cada, ainda sobrando margem para o
-// download da imagem e o casamento de insumos. Medido: 9-29s por chamada.
+// download da imagem. Medido: 9-29s por chamada.
 const GEMINI_TIMEOUT_MS = 60_000
 const GEMINI_MAX_RETRIES = 3
 const MAX_FILE_BYTES = 5 * 1024 * 1024  // 5 MB
 const RATE_LIMIT_RPM = 10
 const RATE_LIMIT_RPD = 50
 const USAGE_CHAVE = 'ocr-extrair'
+// O limite diário vira à meia-noite de Brasília (UTC-3, sem horário de verão
+// desde 2019), não à meia-noite UTC — que seria 21h para quem usa o sistema.
+const OFFSET_BRASILIA_MS = 3 * 3600_000
 
 function classify429(message: string): string {
   const msg = message.toLowerCase()
@@ -158,7 +93,11 @@ type UsageCheck = { bloqueado: false } | { bloqueado: true; mensagem: string; re
 async function verificarRateLimit(supabase: ReturnType<typeof createClient>): Promise<UsageCheck> {
   const agora = new Date()
   const umMinutoAtras = new Date(agora.getTime() - 60_000).toISOString()
-  const inicioDia = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate()).toISOString()
+  const agoraBrasilia = new Date(agora.getTime() - OFFSET_BRASILIA_MS)
+  const inicioDiaMs =
+    Date.UTC(agoraBrasilia.getUTCFullYear(), agoraBrasilia.getUTCMonth(), agoraBrasilia.getUTCDate()) +
+    OFFSET_BRASILIA_MS
+  const inicioDia = new Date(inicioDiaMs).toISOString()
 
   const [{ count: rpm }, { count: rpd }] = await Promise.all([
     supabase.from('api_usage_limits').select('*', { count: 'exact', head: true })
@@ -172,16 +111,17 @@ async function verificarRateLimit(supabase: ReturnType<typeof createClient>): Pr
     return { bloqueado: true, mensagem: `Limite de processamento atingido (${RATE_LIMIT_RPM} por minuto). Aguarde 1 minuto.`, retryAfterMinutos: 1 }
   }
   if ((rpd ?? 0) >= RATE_LIMIT_RPD) {
-    const horasRestantes = 24 - agora.getHours()
+    const horasRestantes = Math.ceil((inicioDiaMs + 24 * 3600_000 - agora.getTime()) / 3600_000)
     console.warn(`[ocr-extrair] Circuit breaker RPD ativado: ${rpd}/${RATE_LIMIT_RPD} req/dia`)
     return { bloqueado: true, mensagem: `Limite diário de processamento atingido (${RATE_LIMIT_RPD}/dia). Tente novamente em ~${horasRestantes}h.`, retryAfterMinutos: horasRestantes * 60 }
   }
 
   // Registra a requisição e limpa registros com mais de 2 dias
   await supabase.from('api_usage_limits').insert({ chave: USAGE_CHAVE })
-  supabase.from('api_usage_limits').delete()
+  const { error: erroLimpeza } = await supabase.from('api_usage_limits').delete()
     .eq('chave', USAGE_CHAVE)
     .lt('created_at', new Date(agora.getTime() - 48 * 3600_000).toISOString())
+  if (erroLimpeza) console.warn(`[ocr-extrair] limpeza de api_usage_limits falhou: ${erroLimpeza.message}`)
 
   return { bloqueado: false }
 }
@@ -211,7 +151,7 @@ function validarArquivoUrl(urlStr: unknown, supabaseUrl: string): string {
   return url.toString()
 }
 
-async function fetchGeminiWithRetry(url: string, body: string, tentativa = 1): Promise<Response> {
+async function fetchGeminiWithRetry(url: string, apiKey: string, body: string, tentativa = 1): Promise<Response> {
   const controller = new AbortController()
   const timeoutId = setTimeout(() => controller.abort(), GEMINI_TIMEOUT_MS)
 
@@ -219,7 +159,7 @@ async function fetchGeminiWithRetry(url: string, body: string, tentativa = 1): P
   try {
     resp = await fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
       body,
       signal: controller.signal,
     })
@@ -250,7 +190,7 @@ async function fetchGeminiWithRetry(url: string, body: string, tentativa = 1): P
     const delay = Math.pow(2, tentativa) * 1000 + Math.random() * 1000
     console.warn(`[ocr-extrair] ${motivo} | tentativa ${tentativa}/${GEMINI_MAX_RETRIES} | aguardando ${Math.round(delay)}ms`)
     await new Promise((r) => setTimeout(r, delay))
-    return fetchGeminiWithRetry(url, body, tentativa + 1)
+    return fetchGeminiWithRetry(url, apiKey, body, tentativa + 1)
   }
 
   return resp
@@ -288,6 +228,14 @@ Deno.serve(async (req) => {
       SUPABASE_URL,
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
     )
+
+    // A anon key é pública (vai no bundle do app), então ela sozinha não pode
+    // bastar para gastar a cota do Gemini: exige o JWT de um usuário logado.
+    const token = req.headers.get('Authorization')?.replace(/^Bearer\s+/i, '') ?? ''
+    const { data: auth } = token ? await supabase.auth.getUser(token) : { data: { user: null } }
+    if (!auth.user) {
+      return jsonResponse({ error: 'Sessão expirada. Entre novamente no sistema.' }, 401)
+    }
 
     const { arquivo_url: arquivoUrlRaw, arquivo_nome } = await req.json()
 
@@ -384,7 +332,8 @@ Deno.serve(async (req) => {
     for (const modelo of MODELOS) {
       try {
         const r = await fetchGeminiWithRetry(
-          `https://generativelanguage.googleapis.com/v1beta/models/${modelo}:generateContent?key=${apiKey}`,
+          `https://generativelanguage.googleapis.com/v1beta/models/${modelo}:generateContent`,
+          apiKey,
           requestBody,
         )
         if (r.status === 503 || r.status === 529) {
@@ -442,13 +391,24 @@ Deno.serve(async (req) => {
 
     console.log(`[ocr-extrair] sucesso | finishReason=${finishReason} | promptTokens=${usage.promptTokenCount} | candidatesTokens=${usage.candidatesTokenCount} | totalTokens=${usage.totalTokenCount}`)
 
+    // Resposta cortada vem com JSON incompleto; melhor uma mensagem acionável
+    // do que o "Unexpected end of JSON input" do parse
     if (finishReason === 'MAX_TOKENS') {
-      console.warn('[ocr-extrair] ALERTA: resposta cortada por MAX_TOKENS — JSON pode estar incompleto')
+      console.warn('[ocr-extrair] resposta cortada por MAX_TOKENS')
+      return jsonResponse(
+        { error: 'A tabela tem itens demais para uma única leitura. Divida o arquivo em partes menores (ex: recorte a imagem ao meio) e envie cada uma.' },
+        422,
+      )
     }
 
     if (!content) throw new Error('O modelo não retornou nenhuma resposta.')
 
-    const parsed = JSON.parse(content) as { itens?: unknown; fornecedor?: unknown }
+    let parsed: { itens?: unknown; fornecedor?: unknown }
+    try {
+      parsed = JSON.parse(content)
+    } catch {
+      throw new Error('A IA devolveu uma resposta em formato inválido. Tente novamente.')
+    }
     if (!Array.isArray(parsed.itens)) throw new Error('Formato de resposta inesperado.')
 
     const itensOCR = (parsed.itens as ItemOCR[]).filter(
@@ -457,14 +417,7 @@ Deno.serve(async (req) => {
 
     if (itensOCR.length === 0) throw new Error('Nenhum item com preço encontrado no documento.')
 
-    const itens: ItemEnriquecido[] = await Promise.all(
-      itensOCR.map(async (item) => {
-        const match = await matchInsumo(supabase, item.descricao)
-        return { ...item, ...match }
-      }),
-    )
-
-    return jsonResponse({ itens, fornecedor: parsed.fornecedor ?? null })
+    return jsonResponse({ itens: itensOCR, fornecedor: parsed.fornecedor ?? null })
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Erro inesperado.'
     console.error(`[ocr-extrair] erro fatal: ${msg}`)

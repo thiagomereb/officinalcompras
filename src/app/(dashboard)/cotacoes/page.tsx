@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { getArquivosSignedUrls } from '@/lib/supabase/storage'
+import { buscarTodos } from '@/lib/supabase/consultas'
 import { Plus } from 'lucide-react'
 import { LancarPrecosModal } from '@/components/cotacoes/LancarPrecosModal'
 import { CotacoesTable, type CotacaoRow } from '@/components/cotacoes/CotacoesTable'
@@ -8,13 +9,15 @@ import { CotacoesTable, type CotacaoRow } from '@/components/cotacoes/CotacoesTa
 export default async function CotacoesPage() {
   const supabase = await createClient()
 
-  const [{ data: cotacoes }, { data: fornecedores }, { data: insumos }] = await Promise.all([
+  const [{ data: cotacoes }, { data: fornecedores }, insumos] = await Promise.all([
     supabase
       .from('cotacoes')
       .select('*, fornecedores(razao_social, nome_fantasia), cotacao_itens(id)')
       .order('data_cotacao', { ascending: false }),
     supabase.from('fornecedores').select('id, razao_social, nome_fantasia').eq('ativo', true).order('razao_social'),
-    supabase.from('insumos').select('id, nome_padrao, unidade_padrao').order('nome_padrao'),
+    buscarTodos((de, ate) =>
+      supabase.from('insumos').select('id, nome_padrao, unidade_padrao').order('nome_padrao').order('id').range(de, ate),
+    ),
   ])
 
   const signedUrls = await getArquivosSignedUrls(
@@ -49,7 +52,7 @@ export default async function CotacoesPage() {
         <div className="flex items-center gap-2">
           <LancarPrecosModal
             fornecedores={fornecedores ?? []}
-            insumos={insumos ?? []}
+            insumos={insumos}
           />
           <Link
             href="/cotacoes/nova"
@@ -64,7 +67,7 @@ export default async function CotacoesPage() {
       {!rows.length ? (
         <div className="text-center py-16 bg-white rounded-xl border border-gray-200">
           <p className="text-gray-500 font-medium">Nenhuma cotação registrada</p>
-          <p className="text-gray-400 text-sm mt-1">Clique em "Nova cotação" para começar</p>
+          <p className="text-gray-400 text-sm mt-1">Clique em &ldquo;Nova cotação&rdquo; para começar</p>
         </div>
       ) : (
         <CotacoesTable cotacoes={rows} />

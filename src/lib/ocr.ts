@@ -13,7 +13,8 @@ export type ItemExtraido = {
 
 // O que uma Server Action devolve ao navegador para ele conduzir a extração.
 // Planilhas já vêm processadas ("concluido"); imagens/PDF exigem a chamada de
-// OCR, que o navegador faz direto na Edge Function (ver ocr-browser.ts).
+// OCR, que o navegador faz direto na Edge Function (ver ocr-browser.ts). O path
+// permite ao navegador baixar o PDF para convertê-lo em imagens antes do OCR.
 export type PreparoExtracao =
   | { modo: 'concluido'; count: number }
-  | { modo: 'ocr'; signedUrl: string; arquivoNome: string }
+  | { modo: 'ocr'; path: string; signedUrl: string }

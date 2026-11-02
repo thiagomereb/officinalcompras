@@ -409,6 +409,10 @@ export type Database = {
       get_secret: { Args: { secret_name: string }; Returns: string }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
+      vincular_itens_cotacao: {
+        Args: { p_cotacao_id: string; p_limiar?: number }
+        Returns: number
+      }
     }
     Enums: {
       [_ in never]: never

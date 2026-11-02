@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { ExternalLink } from 'lucide-react'
+import { formatarPrecoBase } from '@/lib/unidades'
 
 export type ComparativoRow = {
   insumo_id: string
@@ -10,6 +11,7 @@ export type ComparativoRow = {
   cas_number: string | null
   melhor_fornecedor: string
   melhor_cotacao_id: string
+  // Preços na unidade base (R$/g, R$/mL, R$/un) indicada em `unidade`
   melhor_preco: number
   segundo_preco: number | null
   diferenca_pct: number | null
@@ -83,11 +85,10 @@ export function ComparativoTable({ rows }: { rows: ComparativoRow[] }) {
                   </td>
                   <td className="px-4 py-3 text-slate-600">{row.melhor_fornecedor}</td>
                   <td className="px-4 py-3 text-right font-mono font-semibold text-slate-900">
-                    {row.melhor_preco.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                    {row.unidade && <span className="text-xs text-slate-400 ml-0.5">/{row.unidade}</span>}
+                    {formatarPrecoBase({ valor: row.melhor_preco, base: row.unidade })}
                   </td>
                   <td className="px-4 py-3 text-right font-mono text-slate-400">
-                    {row.segundo_preco != null ? row.segundo_preco.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '—'}
+                    {row.segundo_preco != null ? formatarPrecoBase({ valor: row.segundo_preco, base: row.unidade }) : '—'}
                   </td>
                   <td className="px-4 py-3 text-right">
                     {row.diferenca_pct != null ? (

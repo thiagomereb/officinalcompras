@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { X, Plus, Trash2, ClipboardList } from 'lucide-react'
 import { lancarPrecos } from '@/app/(dashboard)/cotacoes/actions'
+import { ehFalha } from '@/lib/acoes'
 
 type Fornecedor = { id: string; razao_social: string; nome_fantasia: string | null }
 type Insumo = { id: string; nome_padrao: string; unidade_padrao: string }
@@ -88,7 +89,7 @@ export function LancarPrecosModal({
 
     startTransition(async () => {
       try {
-        await lancarPrecos({
+        const resultado = await lancarPrecos({
           fornecedor_id: fornecedorId,
           data_cotacao: dataCotacao,
           validade_cotacao: validadeCotacao || null,
@@ -101,6 +102,10 @@ export function LancarPrecosModal({
             unidade: item.unidade || null,
           })),
         })
+        if (ehFalha(resultado)) {
+          setError(resultado.erro)
+          return
+        }
         handleClose()
         router.refresh()
       } catch (err) {

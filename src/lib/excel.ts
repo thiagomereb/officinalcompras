@@ -2,7 +2,7 @@ import * as XLSX from 'xlsx'
 import type { ItemExtraido } from './ocr'
 
 // Aceita cabeçalhos variados por fornecedor — mesmo espírito do mapa de
-// sinônimos de unidade em normalizarUnidade (cotacoes/actions.ts).
+// sinônimos de unidade em normalizarUnidade (lib/unidades.ts).
 const ALIASES: Record<keyof ItemExtraido, string[]> = {
   descricao: ['descricao', 'produto', 'item', 'nome', 'discriminacao'],
   preco_unitario: ['preco unitario', 'preco unit', 'valor unitario', 'valor unit', 'preco', 'valor'],
@@ -38,14 +38,40 @@ function parseNumeroBR(v: unknown): number | null {
   return Number.isFinite(n) ? n : null
 }
 
-function formatarData(v: unknown): string | null {
+function dataISO(ano: number, mes: number, dia: number): string | null {
+  const d = new Date(ano, mes - 1, dia)
+  // Rejeita datas que o construtor "corrige" sozinho, como 31/02
+  if (d.getFullYear() !== ano || d.getMonth() !== mes - 1 || d.getDate() !== dia) return null
+  return `${ano}-${String(mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}`
+}
+
+export function formatarData(v: unknown): string | null {
+  // Com cellDates o SheetJS devolve a data à meia-noite do fuso local, então
+  // os getters locais dão o dia certo (toISOString voltaria um dia a leste de UTC).
   if (v instanceof Date && !isNaN(v.getTime())) {
-    return v.toISOString().split('T')[0]
+    return dataISO(v.getFullYear(), v.getMonth() + 1, v.getDate())
   }
-  if (typeof v === 'string' && v.trim()) {
-    const d = new Date(v.trim())
-    if (!isNaN(d.getTime())) return d.toISOString().split('T')[0]
+  if (typeof v !== 'string' || !v.trim()) return null
+  const s = v.trim()
+
+  const iso = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/)
+  if (iso) return dataISO(Number(iso[1]), Number(iso[2]), Number(iso[3]))
+
+  // Texto digitado em planilha brasileira é dd/mm/aaaa — new Date() leria como mm/dd
+  const br = s.match(/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{2}|\d{4})$/)
+  if (br) {
+    const ano = br[3].length === 2 ? 2000 + Number(br[3]) : Number(br[3])
+    return dataISO(ano, Number(br[2]), Number(br[1]))
   }
+
+  // Validade de insumo costuma vir só como mês/ano: usa o último dia do mês
+  const mesAno = s.match(/^(\d{1,2})[/.-](\d{4})$/)
+  if (mesAno) {
+    const mes = Number(mesAno[1])
+    const ano = Number(mesAno[2])
+    return dataISO(ano, mes, new Date(ano, mes, 0).getDate())
+  }
+
   return null
 }
 

@@ -2,7 +2,8 @@
 import { notFound } from 'next/navigation'
 import { ChevronLeft, CheckCircle } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
-import { calcularScores, agruparPorInsumo, PESOS_PADRAO, type Pesos, type CandidatoItem } from '@/lib/comparacao'
+import { PESOS_PADRAO, type Pesos } from '@/lib/comparacao'
+import { carregarGruposMapa } from '@/lib/mapas'
 import { ComparacaoTable } from '@/components/mapas/ComparacaoTable'
 import { salvarSelecoes, aprovarMapa, excluirMapa } from '../actions'
 import { AprovarMapaButton } from './AprovarMapaButton'
@@ -19,60 +20,13 @@ export default async function MapaPage({ params }: { params: Promise<{ id: strin
   const pesos: Pesos = (mapaData.pesos as Pesos) ?? PESOS_PADRAO
   const aprovado = mapaData.status === 'aprovado' || mapaData.status === 'exportado'
 
-  // Busca cotações + itens + insumos + fornecedores
-  const { data: cotacoes } = await supabase
-    .from('cotacoes')
-    .select('id, prazo_entrega_dias, prazo_pagamento_dias, frete_fixo, frete_gratis_acima, pedido_minimo, fornecedores(razao_social, nome_fantasia)')
-    .in('id', mapaData.cotacoes_ids)
-
-  const { data: itensRaw } = await supabase
-    .from('cotacao_itens')
-    .select('id, cotacao_id, insumo_id, preco_unitario, unidade, quantidade_minima, lote, validade, insumos(nome_padrao)')
-    .in('cotacao_id', mapaData.cotacoes_ids)
-    .not('insumo_id', 'is', null)
-
-  // Busca seleções salvas
-  const { data: selecoesSalvas } = await supabase
-    .from('mapa_cotacao_itens')
-    .select('insumo_id, cotacao_item_id, quantidade')
-    .eq('mapa_id', id)
-
-  // Monta mapa de condições por cotação
-  const condicoesPorCotacao = new Map(
-    (cotacoes ?? []).map((c) => {
-      const f = c.fornecedores as { razao_social: string; nome_fantasia: string | null } | null
-      return [c.id, { ...c, fornecedor_nome: f?.nome_fantasia ?? f?.razao_social ?? '—' }]
-    })
-  )
-
-  // Monta candidatos sem score
-  const candidatosSemScore: Omit<CandidatoItem, 'score'>[] = (itensRaw ?? [])
-    .filter((item) => item.insumo_id)
-    .map((item) => {
-      const cond = condicoesPorCotacao.get(item.cotacao_id)
-      const insumo = item.insumos as { nome_padrao: string } | null
-      return {
-        cotacao_item_id: item.id,
-        cotacao_id: item.cotacao_id,
-        insumo_id: item.insumo_id!,
-        insumo_nome: insumo?.nome_padrao ?? 'Desconhecido',
-        fornecedor_nome: cond?.fornecedor_nome ?? '—',
-        preco_unitario: item.preco_unitario,
-        unidade: item.unidade,
-        quantidade_minima: item.quantidade_minima,
-        lote: item.lote,
-        validade: item.validade,
-        prazo_entrega_dias: cond?.prazo_entrega_dias ?? null,
-        prazo_pagamento_dias: cond?.prazo_pagamento_dias ?? null,
-        frete_fixo: cond?.frete_fixo ?? null,
-        frete_gratis_acima: cond?.frete_gratis_acima ?? null,
-        pedido_minimo: cond?.pedido_minimo ?? null,
-      }
-    })
-
-  // Calcula scores e agrupa
-  const candidatos = calcularScores(candidatosSemScore, pesos)
-  const grupos = agruparPorInsumo(candidatos)
+  const [grupos, { data: selecoesSalvas }] = await Promise.all([
+    carregarGruposMapa(supabase, mapaData.cotacoes_ids, pesos),
+    supabase
+      .from('mapa_cotacao_itens')
+      .select('insumo_id, cotacao_item_id, quantidade')
+      .eq('mapa_id', id),
+  ])
 
   // Detecta grupos duplicados via sinônimos (mesmo insumo, chaves distintas no mapa)
   const insumoIdsNoMapa = grupos.map(g => g.insumo_id)
@@ -80,36 +34,29 @@ export default async function MapaPage({ params }: { params: Promise<{ id: strin
     ? await supabase.from('insumo_sinonimos').select('insumo_id, sinonimo').in('insumo_id', insumoIdsNoMapa)
     : { data: [] as { insumo_id: string; sinonimo: string }[] }
 
-  const sinonimoPorTexto = new Map<string, string>()
-  for (const s of sinonimosNoMapa ?? []) {
-    sinonimoPorTexto.set(s.sinonimo.trim().toLowerCase(), s.insumo_id)
-  }
-
   type InfoDuplicata = { outroId: string; outroNome: string; eMaisBarato: boolean; diffPct: number }
   const duplicatasInfo: Record<string, InfoDuplicata> = {}
 
+  // Compara pelo preço na unidade base, o mesmo usado no score
   const melhorPrecoGrupo = (g: (typeof grupos)[0]) =>
-    Math.min(...g.candidatos.map(c => c.preco_unitario / Math.max(c.quantidade_minima ?? 1, 1)))
+    g.candidatos.length ? Math.min(...g.candidatos.map(c => c.preco_base)) : Infinity
 
-  for (let i = 0; i < grupos.length; i++) {
-    for (let j = i + 1; j < grupos.length; j++) {
-      const a = grupos[i]
-      const b = grupos[j]
-      const aNorm = a.insumo_nome.trim().toLowerCase()
-      const bNorm = b.insumo_nome.trim().toLowerCase()
-      const aSinoDeB = sinonimoPorTexto.get(aNorm) === b.insumo_id
-      const bSinoDeA = sinonimoPorTexto.get(bNorm) === a.insumo_id
-      if (!aSinoDeB && !bSinoDeA) continue
+  // Um grupo é duplicata de outro quando o nome de um aparece como sinônimo do outro
+  const grupoPorNome = new Map(grupos.map(g => [g.insumo_nome.trim().toLowerCase(), g]))
+  const grupoPorId = new Map(grupos.map(g => [g.insumo_id, g]))
+  for (const s of sinonimosNoMapa ?? []) {
+    const a = grupoPorNome.get(s.sinonimo.trim().toLowerCase())
+    const b = grupoPorId.get(s.insumo_id)
+    if (!a || !b || a.insumo_id === b.insumo_id) continue
 
-      const precoA = a.candidatos.length ? melhorPrecoGrupo(a) : Infinity
-      const precoB = b.candidatos.length ? melhorPrecoGrupo(b) : Infinity
-      const aEMaisBarato = precoA <= precoB
-      const ref = aEMaisBarato ? precoA : precoB
-      const diffPct = ref > 0 ? Math.abs(precoA - precoB) / ref * 100 : 0
+    const precoA = melhorPrecoGrupo(a)
+    const precoB = melhorPrecoGrupo(b)
+    const aEMaisBarato = precoA <= precoB
+    const ref = aEMaisBarato ? precoA : precoB
+    const diffPct = ref > 0 && Number.isFinite(ref) ? Math.abs(precoA - precoB) / ref * 100 : 0
 
-      duplicatasInfo[a.insumo_id] = { outroId: b.insumo_id, outroNome: b.insumo_nome, eMaisBarato: aEMaisBarato, diffPct }
-      duplicatasInfo[b.insumo_id] = { outroId: a.insumo_id, outroNome: a.insumo_nome, eMaisBarato: !aEMaisBarato, diffPct }
-    }
+    duplicatasInfo[a.insumo_id] = { outroId: b.insumo_id, outroNome: b.insumo_nome, eMaisBarato: aEMaisBarato, diffPct }
+    duplicatasInfo[b.insumo_id] = { outroId: a.insumo_id, outroNome: a.insumo_nome, eMaisBarato: !aEMaisBarato, diffPct }
   }
 
   // Seleções salvas indexadas por insumo_id

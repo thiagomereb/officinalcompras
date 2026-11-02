@@ -2,11 +2,12 @@
 
 import { useState } from 'react'
 import { Link2 } from 'lucide-react'
+import type { Falha } from '@/lib/acoes'
 
 interface Props {
   cotacaoId: string
   semVinculo: number
-  action: (cotacaoId: string) => Promise<{ vinculados: number }>
+  action: (cotacaoId: string) => Promise<{ vinculados: number } | Falha>
 }
 
 export function VincularItensButton({ cotacaoId, semVinculo, action }: Props) {
@@ -27,11 +28,13 @@ export function VincularItensButton({ cotacaoId, semVinculo, action }: Props) {
         onClick={async () => {
           setPending(true)
           setResultado(null)
-          const { vinculados } = await action(cotacaoId)
+          const resultado = await action(cotacaoId)
           setResultado(
-            vinculados > 0
-              ? `${vinculados} item(ns) vinculado(s)`
-              : 'Nenhum vínculo encontrado'
+            'erro' in resultado
+              ? `Erro: ${resultado.erro}`
+              : resultado.vinculados > 0
+                ? `${resultado.vinculados} item(ns) vinculado(s)`
+                : 'Nenhum vínculo encontrado'
           )
           setPending(false)
         }}

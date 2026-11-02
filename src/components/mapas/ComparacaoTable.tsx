@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react'
 import { CheckCircle, Trophy, Save, Printer } from 'lucide-react'
 import type { GrupoInsumo } from '@/lib/comparacao'
 import type { salvarSelecoes } from '@/app/(dashboard)/mapas/actions'
+import { formatarPrecoBase } from '@/lib/unidades'
 
 type InfoDuplicata = { outroId: string; outroNome: string; eMaisBarato: boolean; diffPct: number }
 
@@ -25,6 +26,7 @@ export function ComparacaoTable({ grupos, selecoesSalvas, mapaId, aprovado, onSa
   )
   const [pending, startTransition] = useTransition()
   const [saved, setSaved] = useState(false)
+  const [erro, setErro] = useState<string | null>(null)
 
   // Auto-seleciona o melhor candidato se ainda não há seleção
   const selecoesFinal = { ...selecoes }
@@ -52,8 +54,13 @@ export function ComparacaoTable({ grupos, selecoesSalvas, mapaId, aprovado, onSa
       quantidade: quantidades[g.insumo_id] ?? 1,
     })).filter((s) => s.cotacao_item_id)
 
+    setErro(null)
     startTransition(async () => {
-      await onSalvar(mapaId, payload)
+      const resultado = await onSalvar(mapaId, payload)
+      if (resultado?.erro) {
+        setErro(resultado.erro)
+        return
+      }
       setSaved(true)
     })
   }
@@ -69,9 +76,11 @@ export function ComparacaoTable({ grupos, selecoesSalvas, mapaId, aprovado, onSa
           <span className="font-medium text-gray-900">{grupos.length}</span> insumos selecionados
         </p>
         <div className="flex items-center gap-3">
+          {erro && <span className="text-sm text-red-600">{erro}</span>}
           <a
-            href="imprimir"
+            href={`/mapas/${mapaId}/imprimir`}
             target="_blank"
+            rel="noopener noreferrer"
             className="inline-flex items-center gap-2 px-3 py-2 text-sm text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
           >
             <Printer size={15} />
@@ -149,6 +158,7 @@ export function ComparacaoTable({ grupos, selecoesSalvas, mapaId, aprovado, onSa
                   <th className="text-left px-5 py-2 text-xs font-medium text-gray-400">Fornecedor</th>
                   <th className="text-right px-5 py-2 text-xs font-medium text-gray-400">Preço Unit.</th>
                   <th className="text-left px-5 py-2 text-xs font-medium text-gray-400">Unid.</th>
+                  <th className="text-right px-5 py-2 text-xs font-medium text-gray-400">Preço/base</th>
                   <th className="text-right px-5 py-2 text-xs font-medium text-gray-400">Entrega</th>
                   <th className="text-right px-5 py-2 text-xs font-medium text-gray-400">Pgto</th>
                   <th className="text-right px-5 py-2 text-xs font-medium text-gray-400">Frete</th>
@@ -185,7 +195,17 @@ export function ComparacaoTable({ grupos, selecoesSalvas, mapaId, aprovado, onSa
                       <td className={`px-5 py-2.5 text-right font-mono font-medium ${isSelecionado ? 'text-blue-700' : 'text-gray-900'}`}>
                         {c.preco_unitario.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                       </td>
-                      <td className="px-5 py-2.5 text-gray-500">{c.unidade ?? '—'}</td>
+                      <td className="px-5 py-2.5 text-gray-500">
+                        {c.quantidade_minima ? `${c.quantidade_minima} ` : ''}{c.unidade ?? '—'}
+                      </td>
+                      <td className="px-5 py-2.5 text-right font-mono text-xs text-gray-500">
+                        {formatarPrecoBase({ valor: c.preco_base, base: c.unidade_base })}
+                        {!c.preco_comparavel && (
+                          <div className="text-[10px] font-sans text-amber-600" title="Unidade de outra grandeza que a dos demais fornecedores: o preço não entrou no score">
+                            unid. diferente
+                          </div>
+                        )}
+                      </td>
                       <td className="px-5 py-2.5 text-right text-gray-500">
                         {c.prazo_entrega_dias != null ? `${c.prazo_entrega_dias}d` : '—'}
                       </td>

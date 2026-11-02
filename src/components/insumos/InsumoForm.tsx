@@ -4,6 +4,7 @@ import { useActionState } from 'react'
 import Link from 'next/link'
 import { SinonimosEditor } from './SinonimosEditor'
 import type { Tables } from '@/types/database'
+import type { Falha } from '@/lib/acoes'
 
 type Insumo = Tables<'insumos'>
 type Sinonimo = Tables<'insumo_sinonimos'>
@@ -13,15 +14,15 @@ const UNIDADES = ['g', 'kg', 'mg', 'mcg', 'mL', 'L', 'UI', 'un', 'cáps', 'comp'
 interface Props {
   insumo?: Insumo
   sinonimos?: Sinonimo[]
-  action: (formData: FormData) => Promise<void>
+  action: (formData: FormData) => Promise<Falha | void>
 }
 
 export function InsumoForm({ insumo, sinonimos = [], action }: Props) {
   const [error, formAction, pending] = useActionState(
     async (_: string | null, formData: FormData) => {
       try {
-        await action(formData)
-        return null
+        const resultado = await action(formData)
+        return resultado?.erro ?? null
       } catch (e) {
         return (e as Error).message
       }

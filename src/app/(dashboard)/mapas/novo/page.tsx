@@ -2,6 +2,7 @@
 import { ChevronLeft, FileText, Plus } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { PesosEditor } from '@/components/mapas/PesosEditor'
+import { NovoMapaForm } from '@/components/mapas/NovoMapaForm'
 import { PESOS_PADRAO } from '@/lib/comparacao'
 import { criarMapa } from '../actions'
 
@@ -51,7 +52,7 @@ export default async function NovoMapaPage() {
           </div>
         </div>
       ) : (
-        <form action={criarMapa} className="space-y-8 max-w-3xl">
+        <NovoMapaForm action={criarMapa}>
           {/* Título */}
           <div className="bg-white rounded-xl border border-gray-200 p-6">
             <h3 className="text-sm font-semibold text-gray-700 mb-4">Identificação</h3>
@@ -98,18 +99,7 @@ export default async function NovoMapaPage() {
             <PesosEditor inicial={PESOS_PADRAO} />
           </div>
 
-          <div className="flex gap-3">
-            <button
-              type="submit"
-              className="px-5 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
-            >
-              Gerar comparação →
-            </button>
-            <Link href="/mapas" className="px-5 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
-              Cancelar
-            </Link>
-          </div>
-        </form>
+        </NovoMapaForm>
       )}
     </div>
   )

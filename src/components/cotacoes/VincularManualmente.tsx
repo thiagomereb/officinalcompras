@@ -2,6 +2,7 @@
 
 import { useState, useTransition, useRef, useEffect } from 'react'
 import { Check, Link2 } from 'lucide-react'
+import type { Falha } from '@/lib/acoes'
 
 type Item = {
   id: string
@@ -13,18 +14,21 @@ type Item = {
 
 type Insumo = { id: string; nome_padrao: string }
 
+type VincularAction = (itemId: string, insumoId: string, cotacaoId: string) => Promise<Falha | void>
+
 interface RowProps {
   item: Item
   insumos: Insumo[]
   cotacaoId: string
-  action: (itemId: string, insumoId: string, cotacaoId: string) => Promise<void>
-  onVinculado: (itemId: string, insumoNome: string) => void
+  action: VincularAction
+  onAlterado: (itemId: string, vinculado: boolean) => void
 }
 
-function ItemRow({ item, insumos, cotacaoId, action, onVinculado }: RowProps) {
+function ItemRow({ item, insumos, cotacaoId, action, onAlterado }: RowProps) {
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(false)
   const [vinculadoNome, setVinculadoNome] = useState<string | null>(null)
+  const [erro, setErro] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
   const containerRef = useRef<HTMLDivElement>(null)
 
@@ -48,9 +52,16 @@ function ItemRow({ item, insumos, cotacaoId, action, onVinculado }: RowProps) {
     setOpen(false)
     setQuery(insumo.nome_padrao)
     setVinculadoNome(insumo.nome_padrao)
-    onVinculado(item.id, insumo.nome_padrao)
+    setErro(null)
+    onAlterado(item.id, true)
     startTransition(async () => {
-      await action(item.id, insumo.id, cotacaoId)
+      const resultado = await action(item.id, insumo.id, cotacaoId)
+      if (resultado?.erro) {
+        // Desfaz o otimismo da interface: o vínculo não foi gravado
+        setVinculadoNome(null)
+        setErro(resultado.erro)
+        onAlterado(item.id, false)
+      }
     })
   }
 
@@ -102,6 +113,7 @@ function ItemRow({ item, insumos, cotacaoId, action, onVinculado }: RowProps) {
                 ))}
               </ul>
             )}
+            {erro && <p className="mt-1 text-xs text-red-600">{erro}</p>}
             {open && query.trim().length >= 1 && filtrados.length === 0 && (
               <div className="absolute top-full mt-1 left-0 right-0 bg-white border border-gray-200 rounded-lg shadow-lg z-20 px-3 py-2 text-sm text-gray-400">
                 Nenhum insumo encontrado
@@ -118,15 +130,20 @@ interface Props {
   itens: Item[]
   insumos: Insumo[]
   cotacaoId: string
-  action: (itemId: string, insumoId: string, cotacaoId: string) => Promise<void>
+  action: VincularAction
 }
 
 export function VincularManualmente({ itens, insumos, cotacaoId, action }: Props) {
   const [filtroDesc, setFiltroDesc] = useState('')
   const [vinculadosLocal, setVinculadosLocal] = useState<Set<string>>(new Set())
 
-  function onVinculado(itemId: string, _nome: string) {
-    setVinculadosLocal(prev => new Set([...prev, itemId]))
+  function onAlterado(itemId: string, vinculado: boolean) {
+    setVinculadosLocal(prev => {
+      const next = new Set(prev)
+      if (vinculado) next.add(itemId)
+      else next.delete(itemId)
+      return next
+    })
   }
 
   const itensFiltrados = filtroDesc.trim()
@@ -175,7 +192,7 @@ export function VincularManualmente({ itens, insumos, cotacaoId, action }: Props
                   insumos={insumos}
                   cotacaoId={cotacaoId}
                   action={action}
-                  onVinculado={onVinculado}
+                  onAlterado={onAlterado}
                 />
               ))}
             </tbody>

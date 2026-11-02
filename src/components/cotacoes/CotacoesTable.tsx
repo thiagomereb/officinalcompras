@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { Search, Pencil, Clock, CheckCircle, AlertCircle, Paperclip, Sparkles, Loader2, FileText } from 'lucide-react'
 import { prepararExtracao } from '@/app/(dashboard)/cotacoes/actions'
 import { concluirExtracao } from '@/lib/ocr-browser'
+import { ehFalha } from '@/lib/acoes'
 
 export type CotacaoRow = {
   id: string
@@ -36,7 +37,7 @@ export function CotacoesTable({ cotacoes }: { cotacoes: CotacaoRow[] }) {
   const [selecionados, setSelecionados] = useState<Set<string>>(new Set())
   const [pending, startTransition] = useTransition()
   const [progresso, setProgresso] = useState('')
-  const [resultado, setResultado] = useState<string | null>(null)
+  const [resultado, setResultado] = useState<{ resumo: string; falhas: string[] } | null>(null)
 
   // Filtrar não mexe na seleção — arquivos escolhidos continuam marcados
   // mesmo que saiam da lista visível ao digitar na busca.
@@ -77,30 +78,48 @@ export function CotacoesTable({ cotacoes }: { cotacoes: CotacaoRow[] }) {
 
   // O loop roda no navegador (e não numa Server Action) porque cada OCR pode
   // levar minutos — uma Netlify Function estouraria o limite de 60s.
+  // Cada cotação é reextraída do seu próprio arquivo, então os itens que ela já
+  // tinha são substituídos (somar duplicaria tudo).
   function handleExtrairSelecionados() {
-    setResultado(null)
     const ids = [...selecionados]
+    const comItens = cotacoes.filter((c) => selecionados.has(c.id) && c.totalItens > 0)
+    if (
+      comItens.length > 0 &&
+      !confirm(`${comItens.length} das cotações selecionadas já têm itens, que serão substituídos pelos extraídos agora. Continuar?`)
+    ) {
+      return
+    }
+
+    setResultado(null)
     startTransition(async () => {
       let ok = 0
-      let falhas = 0
+      const falhas: string[] = []
 
       for (const [i, id] of ids.entries()) {
-        setProgresso(`Extraindo ${i + 1} de ${ids.length}...`)
+        const nome = cotacoes.find((c) => c.id === id)?.fornecedorNome ?? id
+        const etapa = `${i + 1} de ${ids.length}`
+        setProgresso(`Extraindo ${etapa}...`)
         try {
-          const preparo = await prepararExtracao(id)
-          await concluirExtracao(id, preparo)
+          const preparo = await prepararExtracao(id, true)
+          if (ehFalha(preparo)) throw new Error(preparo.erro)
+          await concluirExtracao(id, preparo, {
+            substituir: true,
+            progresso: (msg) => setProgresso(`${etapa}: ${msg}`),
+          })
           ok++
-        } catch {
-          falhas++
+        } catch (err) {
+          falhas.push(`${nome}: ${(err as Error).message}`)
         }
       }
 
       setProgresso('')
-      setResultado(
-        falhas === 0
-          ? `${ok} cotação(ões) extraída(s) com sucesso!`
-          : `${ok} extraída(s), ${falhas} com erro.`,
-      )
+      setResultado({
+        resumo:
+          falhas.length === 0
+            ? `${ok} cotação(ões) extraída(s) com sucesso!`
+            : `${ok} extraída(s), ${falhas.length} com erro:`,
+        falhas,
+      })
       setSelecionados(new Set())
     })
   }
@@ -135,7 +154,12 @@ export function CotacoesTable({ cotacoes }: { cotacoes: CotacaoRow[] }) {
 
       {resultado && (
         <div className="mb-4 text-sm text-gray-600 bg-gray-50 border border-gray-200 rounded-lg px-4 py-2">
-          {resultado}
+          {resultado.resumo}
+          {resultado.falhas.length > 0 && (
+            <ul className="mt-1 list-disc pl-5 text-red-600">
+              {resultado.falhas.map((f) => <li key={f}>{f}</li>)}
+            </ul>
+          )}
         </div>
       )}
 
@@ -192,9 +216,9 @@ export function CotacoesTable({ cotacoes }: { cotacoes: CotacaoRow[] }) {
                     </td>
                     <td className="px-6 py-4">
                       <div className="text-xs text-gray-500 space-y-0.5">
-                        {c.prazo_entrega_dias && <div>Entrega: {c.prazo_entrega_dias}d</div>}
-                        {c.prazo_pagamento_dias && <div>Pgto: {c.prazo_pagamento_dias}d</div>}
-                        {c.frete_fixo && <div>Frete: R$ {c.frete_fixo.toFixed(2)}</div>}
+                        {c.prazo_entrega_dias != null && <div>Entrega: {c.prazo_entrega_dias}d</div>}
+                        {c.prazo_pagamento_dias != null && <div>Pgto: {c.prazo_pagamento_dias}d</div>}
+                        {c.frete_fixo ? <div>Frete: R$ {c.frete_fixo.toFixed(2)}</div> : null}
                       </div>
                     </td>
                     <td className="px-6 py-4">

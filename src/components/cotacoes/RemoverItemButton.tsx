@@ -2,11 +2,12 @@
 
 import { useTransition } from 'react'
 import { Trash2 } from 'lucide-react'
+import type { Falha } from '@/lib/acoes'
 
 interface Props {
   id: string
   cotacaoId: string
-  action: (id: string, cotacaoId: string) => Promise<void>
+  action: (id: string, cotacaoId: string) => Promise<Falha | void>
 }
 
 export function RemoverItemButton({ id, cotacaoId, action }: Props) {
@@ -16,7 +17,10 @@ export function RemoverItemButton({ id, cotacaoId, action }: Props) {
     <button
       onClick={() => {
         if (!confirm('Remover este item?')) return
-        startTransition(() => action(id, cotacaoId))
+        startTransition(async () => {
+          const resultado = await action(id, cotacaoId)
+          if (resultado?.erro) alert(resultado.erro)
+        })
       }}
       disabled={pending}
       className="p-1.5 text-gray-300 hover:text-red-500 disabled:opacity-40 transition-colors rounded"

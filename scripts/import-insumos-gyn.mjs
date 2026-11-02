@@ -3,7 +3,7 @@
  *   - tabela `insumos`          (um registro por PRODUTO PRINCIPAL)
  *   - tabela `insumo_sinonimos` (um registro por SINÔNIMO vinculado ao insumo)
  *
- * Uso: node scripts/import-insumos-gyn.mjs
+ * Uso: node scripts/import-insumos-gyn.mjs <caminho/SinonimosGYN_tabela_completa.xlsx>
  */
 
 import { createClient } from '@supabase/supabase-js'
@@ -13,15 +13,16 @@ import { fileURLToPath } from 'url'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
-// Lê .env.local
+// Lê .env.local (sem dependência de dotenv). Corta só no primeiro "=", porque
+// chaves JWT podem conter "=" no valor, e tira aspas opcionais.
 const envPath = resolve(__dirname, '../.env.local')
 const env = Object.fromEntries(
   readFileSync(envPath, 'utf-8')
     .split('\n')
-    .filter((l) => l.includes('=') && !l.startsWith('#'))
+    .filter((l) => l.includes('=') && !l.trim().startsWith('#'))
     .map((l) => {
       const idx = l.indexOf('=')
-      return [l.slice(0, idx).trim(), l.slice(idx + 1).trim()]
+      return [l.slice(0, idx).trim(), l.slice(idx + 1).trim().replace(/^(['"])(.*)\1$/, '$2')]
     }),
 )
 
@@ -39,7 +40,11 @@ const supabase = createClient(SUPABASE_URL, SERVICE_KEY)
 const xlsx = await import('xlsx').then((m) => m.default ?? m)
 const { readFile, utils } = xlsx
 
-const EXCEL_PATH = 'C:/Users/thiag/Downloads/SinonimosGYN_tabela_completa.xlsx'
+const EXCEL_PATH = process.argv[2]
+if (!EXCEL_PATH) {
+  console.error('❌  Informe o caminho do Excel: node scripts/import-insumos-gyn.mjs <arquivo.xlsx>')
+  process.exit(1)
+}
 const wb    = readFile(EXCEL_PATH)
 const sheet = wb.Sheets[wb.SheetNames[0]]
 const rows  = utils.sheet_to_json(sheet, { header: 1 }).slice(1)
