@@ -1,2 +1,6 @@
 [build]
   command = "npm run build"
+  # Saída do build do Next, que o runtime de Next.js do Netlify transforma em
+  # funções. Fixado aqui porque o arquivo tem prioridade sobre o painel: com a
+  # raiz do repositório como publish, o site servia os arquivos-fonte e dava 404.
+  publish = ".next"
