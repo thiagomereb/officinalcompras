@@ -7,6 +7,7 @@ import {
   LayoutDashboard,
   FileText,
   GitCompare,
+  History,
   Building2,
   Package,
   BarChart3,
@@ -21,7 +22,7 @@ import { Marca } from '@/components/ui/Marca'
 
 type ItemNav = { href: string; label: string; icone: LucideIcon }
 
-// Na ordem do trabalho: a cotação chega, vira mapa, o mapa é aprovado
+// Na ordem do trabalho: a cotação chega, vira mapa, o mapa aprovado vira compra
 const grupos: { label: string; itens: ItemNav[] }[] = [
   {
     label: 'Compras',
@@ -29,6 +30,7 @@ const grupos: { label: string; itens: ItemNav[] }[] = [
       { href: '/dashboard', label: 'Painel', icone: LayoutDashboard },
       { href: '/cotacoes', label: 'Cotações', icone: FileText },
       { href: '/mapas', label: 'Mapas de cotação', icone: GitCompare },
+      { href: '/compras', label: 'Histórico de compras', icone: History },
     ],
   },
   {

@@ -1,7 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database } from '@/types/database'
 import { calcularScores, agruparPorInsumo, type CandidatoSemScore, type GrupoInsumo, type Pesos } from './comparacao'
-import { buscarTodos } from './supabase/consultas'
+import { buscarTodos, emLotes } from './supabase/consultas'
 
 type Fornecedor = { razao_social: string; nome_fantasia: string | null } | null
 
@@ -65,4 +65,42 @@ export async function carregarGruposMapa(
     })
 
   return agruparPorInsumo(calcularScores(candidatos, pesos))
+}
+
+export type UltimaCompra = {
+  mapa_id: string
+  fornecedor_nome: string
+  preco_base: number
+  unidade_base: string | null
+  aprovado_em: string
+}
+
+// Referência para negociar: a compra aprovada mais recente de cada insumo
+export async function carregarUltimasCompras(
+  supabase: SupabaseClient<Database>,
+  insumoIds: string[],
+): Promise<Record<string, UltimaCompra>> {
+  const linhas = await emLotes(insumoIds, (lote) =>
+    supabase
+      .from('historico_compras')
+      .select('insumo_id, mapa_id, fornecedor_nome, preco_base, unidade_base, aprovado_em')
+      .in('insumo_id', lote)
+      .order('aprovado_em', { ascending: false })
+      .limit(1000),
+  )
+
+  const ultimas: Record<string, UltimaCompra> = {}
+  for (const l of linhas) {
+    if (!l.insumo_id || !l.mapa_id || l.preco_base == null || !l.aprovado_em) continue
+    const atual = ultimas[l.insumo_id]
+    if (atual && atual.aprovado_em >= l.aprovado_em) continue
+    ultimas[l.insumo_id] = {
+      mapa_id: l.mapa_id,
+      fornecedor_nome: l.fornecedor_nome ?? '—',
+      preco_base: l.preco_base,
+      unidade_base: l.unidade_base,
+      aprovado_em: l.aprovado_em,
+    }
+  }
+  return ultimas
 }

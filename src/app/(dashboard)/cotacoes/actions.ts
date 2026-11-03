@@ -21,7 +21,7 @@ const LIMIAR_VINCULO = 0.45
 const PATH_ARQUIVO = /^\d+-[a-z0-9]+\.(jpe?g|png|webp|pdf|xlsx|xls)$/
 
 const MSG_ITEM_EM_MAPA =
-  'Há itens desta cotação usados em um mapa de cotação. Exclua o mapa que usa esta cotação antes de remover os itens.'
+  'Há itens desta cotação escolhidos em um mapa de cotação. Num rascunho, desfaça a escolha (ou exclua o mapa); se o mapa já foi aprovado, a cotação fica guardada como registro da compra.'
 
 function textoOuNulo(v: unknown): string | null {
   return typeof v === 'string' && v.trim() ? v.trim() : null
@@ -256,7 +256,7 @@ export async function removerItem(id: string, cotacaoId: string): Promise<Falha 
   if (error) {
     return {
       erro: mensagemErroBanco(error, {
-        emUso: 'Este item está selecionado em um mapa de cotação. Exclua o mapa antes de remover o item.',
+        emUso: 'Este item foi escolhido em um mapa de cotação. Num rascunho, desfaça a escolha; se o mapa já foi aprovado, o item fica guardado como registro da compra.',
       }),
     }
   }

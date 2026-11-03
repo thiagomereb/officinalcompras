@@ -4,7 +4,8 @@ export type RankingItem = {
   total: number
 }
 
-// O líder leva o âmbar — é o fornecedor que o sistema "escolheria" mais vezes
+// Contagem de sugestões, não de compras: a decisão é do comprador (ver
+// Histórico de compras para o que foi de fato comprado)
 export function RankingFornecedores({ items }: { items: RankingItem[] }) {
   const max = Math.max(...items.map((i) => i.wins), 1)
 
@@ -12,8 +13,8 @@ export function RankingFornecedores({ items }: { items: RankingItem[] }) {
     <section className="painel">
       <div className="painel-topo">
         <div>
-          <h2 className="painel-titulo">Fornecedores com mais melhores ofertas</h2>
-          <p className="text-[12.5px] text-ardosia">Insumos em que cada um tem o melhor score</p>
+          <h2 className="painel-titulo">Sugestões do sistema por fornecedor</h2>
+          <p className="text-[12.5px] text-ardosia">Insumos em que cada um tem o melhor score nas cotações vigentes</p>
         </div>
       </div>
       {items.length === 0 ? (
@@ -31,7 +32,7 @@ export function RankingFornecedores({ items }: { items: RankingItem[] }) {
               </div>
               <div className="h-1.5 overflow-hidden rounded-full bg-nevoa">
                 <div
-                  className={`h-full rounded-full ${i === 0 ? 'bg-ambar' : 'bg-grafite/70'}`}
+                  className={`h-full rounded-full ${i === 0 ? 'bg-grafite' : 'bg-grafite/45'}`}
                   style={{ width: `${(item.wins / max) * 100}%` }}
                 />
               </div>

@@ -18,3 +18,22 @@ export async function buscarTodos<T>(
     todos.push(...data)
   }
 }
+
+// Filtros .in() viram query string; com centenas de ids a URL passa do limite
+// do gateway. Divide a lista e junta os resultados.
+export async function emLotes<T>(
+  ids: string[],
+  consulta: (lote: string[]) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>,
+  tamanho = 100,
+): Promise<T[]> {
+  const unicos = [...new Set(ids)]
+  const resultados = await Promise.all(
+    Array.from({ length: Math.ceil(unicos.length / tamanho) }, (_, i) =>
+      consulta(unicos.slice(i * tamanho, (i + 1) * tamanho)),
+    ),
+  )
+  return resultados.flatMap(({ data, error }) => {
+    if (error) throw new Error(error.message)
+    return data ?? []
+  })
+}

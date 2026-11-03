@@ -2,7 +2,8 @@
 import { createClient } from '@/lib/supabase/server'
 import { PESOS_PADRAO, type Pesos } from '@/lib/comparacao'
 import { carregarGruposMapa } from '@/lib/mapas'
-import { formatarPrecoBase } from '@/lib/unidades'
+import { ehComparacaoCongelada, sugestaoDoGrupo, valorEstimado } from '@/lib/compras'
+import { ehUnidadeQuantidade, formatarPrecoBase } from '@/lib/unidades'
 import { PrintButton } from './PrintButton'
 import { Marca } from '@/components/ui/Marca'
 
@@ -11,6 +12,15 @@ function formatDate(d: string | null) {
   return new Date(d + 'T12:00:00').toLocaleDateString('pt-BR')
 }
 
+const moeda = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+
+const CARIMBO = {
+  rascunho: { texto: 'Rascunho', cls: 'border-ardosia-2 text-ardosia' },
+  aprovado: { texto: 'Aprovado', cls: 'border-salvia text-salvia' },
+  exportado: { texto: 'Aprovado', cls: 'border-salvia text-salvia' },
+  cancelado: { texto: 'Cancelado', cls: 'border-oxido text-oxido' },
+} as const
+
 export default async function ImprimirMapaPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const supabase = await createClient()
@@ -18,19 +28,20 @@ export default async function ImprimirMapaPage({ params }: { params: Promise<{ i
   const { data: mapa } = await supabase.from('mapas_cotacao').select('*').eq('id', id).single()
   if (!mapa) notFound()
 
-  const pesos: Pesos = (mapa.pesos as Pesos) ?? PESOS_PADRAO
+  const rascunho = mapa.status === 'rascunho'
+  const congelada = ehComparacaoCongelada(mapa.comparacao) ? mapa.comparacao : null
+  const pesos: Pesos = congelada?.pesos ?? (mapa.pesos as Pesos | null) ?? PESOS_PADRAO
 
-  const [grupos, selecoesRes] = await Promise.all([
-    carregarGruposMapa(supabase, mapa.cotacoes_ids, pesos),
+  // Aprovado imprime o que foi aprovado, não o estado atual das cotações
+  const [grupos, { data: escolhas }] = await Promise.all([
+    congelada && !rascunho ? Promise.resolve(congelada.grupos) : carregarGruposMapa(supabase, mapa.cotacoes_ids, pesos),
     supabase
       .from('mapa_cotacao_itens')
-      .select('insumo_id, cotacao_item_id, quantidade')
+      .select('insumo_id, cotacao_item_id, quantidade, quantidade_unidade, valor_total')
       .eq('mapa_id', id),
   ])
 
-  const selecoesMapa = new Map(
-    (selecoesRes.data ?? []).map((s) => [s.insumo_id, s])
-  )
+  const escolhaPorInsumo = new Map((escolhas ?? []).map((e) => [e.insumo_id, e]))
 
   const dataGeracao = new Date().toLocaleDateString('pt-BR', {
     day: '2-digit',
@@ -38,7 +49,17 @@ export default async function ImprimirMapaPage({ params }: { params: Promise<{ i
     year: 'numeric',
     timeZone: 'America/Sao_Paulo',
   })
-  const aprovado = mapa.status === 'aprovado' || mapa.status === 'exportado'
+  const carimbo = CARIMBO[mapa.status as keyof typeof CARIMBO] ?? CARIMBO.rascunho
+
+  // No rascunho o total é calculado na hora; aprovado usa o valor gravado
+  const totalRascunho = grupos.reduce((soma, g) => {
+    const e = escolhaPorInsumo.get(g.insumo_id)
+    const c = e && g.candidatos.find((x) => x.cotacao_item_id === e.cotacao_item_id)
+    if (!e || !c) return soma
+    const v = valorEstimado(c, e.quantidade, ehUnidadeQuantidade(e.quantidade_unidade) ? e.quantidade_unidade : null)
+    return v.tipo === 'valor' ? soma + v.valor : soma
+  }, 0)
+  const total = rascunho ? totalRascunho : mapa.valor_total
 
   return (
     <div className="min-h-screen bg-papel">
@@ -57,63 +78,84 @@ export default async function ImprimirMapaPage({ params }: { params: Promise<{ i
               <p className="mt-1 text-[16px] text-ardosia">{mapa.titulo}</p>
             </div>
             <div className="text-right">
-              {/* No documento que vai para assinatura, a aprovação aparece como carimbo */}
+              {/* No documento que vai para assinatura, a situação aparece como carimbo */}
               <span
-                className={`inline-block rounded border-[3px] border-double px-3 py-1.5 text-[13px] font-bold uppercase tracking-[0.06em] ${
-                  aprovado ? 'border-salvia text-salvia' : 'border-ardosia-2 text-ardosia'
-                }`}
+                className={`inline-block rounded border-[3px] border-double px-3 py-1.5 text-[13px] font-bold uppercase tracking-[0.06em] ${carimbo.cls}`}
               >
-                {aprovado ? 'Aprovado' : 'Rascunho'}
+                {carimbo.texto}
               </span>
-              <p className="mt-3 text-[12.5px] text-ardosia">Gerado em {dataGeracao}</p>
+              {mapa.aprovado_em && (
+                <p className="mt-3 text-[12.5px] text-ardosia">
+                  Aprovado em{' '}
+                  {new Date(mapa.aprovado_em).toLocaleString('pt-BR', {
+                    dateStyle: 'short',
+                    timeStyle: 'short',
+                    timeZone: 'America/Sao_Paulo',
+                  })}
+                  {mapa.aprovado_por && <> por {mapa.aprovado_por}</>}
+                </p>
+              )}
+              <p className="mt-1 text-[12.5px] text-ardosia">Gerado em {dataGeracao}</p>
             </div>
           </div>
+          {mapa.status === 'cancelado' && (
+            <p className="mt-4 text-[13px] text-oxido">Cancelado. Motivo: {mapa.motivo_cancelamento ?? '—'}</p>
+          )}
         </div>
 
-        {/* Tabela principal */}
         {grupos.map((grupo) => {
-          const selecao = selecoesMapa.get(grupo.insumo_id)
-          const vencedor = selecao
-            ? grupo.candidatos.find((c) => c.cotacao_item_id === selecao.cotacao_item_id)
-            : grupo.candidatos[0]
-          const qtd = selecao?.quantidade
+          const escolha = escolhaPorInsumo.get(grupo.insumo_id)
+          const escolhido = escolha ? grupo.candidatos.find((c) => c.cotacao_item_id === escolha.cotacao_item_id) : undefined
+          const sugestao = sugestaoDoGrupo(grupo)
+          const unidade = escolha && ehUnidadeQuantidade(escolha.quantidade_unidade) ? escolha.quantidade_unidade : null
+          const valor =
+            escolha && escolhido
+              ? rascunho
+                ? (() => {
+                    const v = valorEstimado(escolhido, escolha.quantidade, unidade)
+                    return v.tipo === 'valor' ? v.valor : null
+                  })()
+                : escolha.valor_total
+              : null
 
           return (
             <div key={grupo.insumo_id} className="mb-8 break-inside-avoid">
-              <div className="flex items-baseline justify-between mb-2">
+              <div className="mb-2 flex items-baseline justify-between gap-4">
                 <h3 className="font-bold text-grafite">{grupo.insumo_nome}</h3>
-                {qtd && (
-                  <span className="text-sm text-ardosia">Qtd. solicitada: <strong>{qtd}</strong></span>
-                )}
+                {!escolhido && <span className="text-[12.5px] text-ardosia">não comprado</span>}
               </div>
-              <table className="w-full text-xs border-collapse">
+              <table className="w-full border-collapse text-xs">
                 <thead>
                   <tr className="bg-nevoa">
-                    <th className="text-left border border-linha px-3 py-1.5 font-semibold">Fornecedor</th>
-                    <th className="text-right border border-linha px-3 py-1.5 font-semibold">Preço Unit.</th>
-                    <th className="text-center border border-linha px-3 py-1.5 font-semibold">Unid.</th>
-                    <th className="text-right border border-linha px-3 py-1.5 font-semibold">Preço/base</th>
-                    <th className="text-center border border-linha px-3 py-1.5 font-semibold">Entrega</th>
-                    <th className="text-center border border-linha px-3 py-1.5 font-semibold">Pgto</th>
-                    <th className="text-right border border-linha px-3 py-1.5 font-semibold">Frete</th>
-                    <th className="text-center border border-linha px-3 py-1.5 font-semibold">Val. Lote</th>
-                    <th className="text-center border border-linha px-3 py-1.5 font-semibold">Score</th>
-                    <th className="text-center border border-linha px-3 py-1.5 font-semibold">Selecionado</th>
+                    <th className="border border-linha px-3 py-1.5 text-left font-semibold">Fornecedor</th>
+                    <th className="border border-linha px-3 py-1.5 text-right font-semibold">Preço</th>
+                    <th className="border border-linha px-3 py-1.5 text-center font-semibold">Emb.</th>
+                    <th className="border border-linha px-3 py-1.5 text-right font-semibold">Preço/base</th>
+                    <th className="border border-linha px-3 py-1.5 text-center font-semibold">Entrega</th>
+                    <th className="border border-linha px-3 py-1.5 text-center font-semibold">Pgto</th>
+                    <th className="border border-linha px-3 py-1.5 text-right font-semibold">Frete</th>
+                    <th className="border border-linha px-3 py-1.5 text-center font-semibold">Val. lote</th>
+                    <th className="border border-linha px-3 py-1.5 text-center font-semibold">Score</th>
+                    <th className="border border-linha px-3 py-1.5 text-center font-semibold">Escolhido</th>
                   </tr>
                 </thead>
                 <tbody>
                   {grupo.candidatos.map((c) => {
-                    const isSelecionado = vencedor?.cotacao_item_id === c.cotacao_item_id
+                    const isEscolhido = escolhido?.cotacao_item_id === c.cotacao_item_id
                     return (
-                      <tr key={c.cotacao_item_id} className={isSelecionado ? 'bg-ambar-veu font-medium' : ''}>
-                        <td className="border border-linha px-3 py-1.5">{c.fornecedor_nome}</td>
-                        <td className="border border-linha px-3 py-1.5 text-right leitura">
-                          {c.preco_unitario.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                      <tr key={c.cotacao_item_id} className={isEscolhido ? 'bg-ambar-veu font-medium' : ''}>
+                        <td className="border border-linha px-3 py-1.5">
+                          {c.fornecedor_nome}
+                          {sugestao?.cotacao_item_id === c.cotacao_item_id && (
+                            <span className="ml-1 font-normal text-ardosia">(sugestão)</span>
+                          )}
                         </td>
+                        <td className="leitura border border-linha px-3 py-1.5 text-right">{moeda(c.preco_unitario)}</td>
                         <td className="border border-linha px-3 py-1.5 text-center">
-                          {c.quantidade_minima ? `${c.quantidade_minima} ` : ''}{c.unidade ?? '—'}
+                          {c.quantidade_minima ? `${c.quantidade_minima} ` : ''}
+                          {c.unidade ?? '—'}
                         </td>
-                        <td className="border border-linha px-3 py-1.5 text-right leitura">
+                        <td className="leitura border border-linha px-3 py-1.5 text-right">
                           {formatarPrecoBase({ valor: c.preco_base, base: c.unidade_base })}
                         </td>
                         <td className="border border-linha px-3 py-1.5 text-center">
@@ -123,41 +165,53 @@ export default async function ImprimirMapaPage({ params }: { params: Promise<{ i
                           {c.prazo_pagamento_dias != null ? `${c.prazo_pagamento_dias}d` : '—'}
                         </td>
                         <td className="border border-linha px-3 py-1.5 text-right">
-                          {c.frete_fixo ? `R$ ${c.frete_fixo.toFixed(2)}` : 'Grátis'}
+                          {c.frete_fixo ? moeda(c.frete_fixo) : 'Grátis'}
                         </td>
-                        <td className="border border-linha px-3 py-1.5 text-center">
-                          {formatDate(c.validade)}
-                        </td>
-                        <td className="border border-linha px-3 py-1.5 text-center font-bold">
-                          {(c.score * 100).toFixed(0)}
-                        </td>
-                        <td className="border border-linha px-3 py-1.5 text-center text-lg">
-                          {isSelecionado ? '✓' : ''}
-                        </td>
+                        <td className="border border-linha px-3 py-1.5 text-center">{formatDate(c.validade)}</td>
+                        <td className="border border-linha px-3 py-1.5 text-center">{(c.score * 100).toFixed(0)}</td>
+                        <td className="border border-linha px-3 py-1.5 text-center text-lg">{isEscolhido ? '✓' : ''}</td>
                       </tr>
                     )
                   })}
                 </tbody>
               </table>
+              {escolha && escolhido && (
+                <p className="mt-1.5 text-[12px] text-ardosia">
+                  Quantidade:{' '}
+                  <strong className="text-grafite">
+                    {escolha.quantidade != null ? `${escolha.quantidade.toLocaleString('pt-BR')} ${unidade ?? ''}` : '—'}
+                  </strong>
+                  {valor != null && (
+                    <>
+                      {' · '}Valor: <strong className="leitura text-grafite">{moeda(valor)}</strong>
+                    </>
+                  )}
+                </p>
+              )}
             </div>
           )
         })}
 
+        {total != null && total > 0 && (
+          <p className="mt-6 flex justify-end gap-3 border-t border-linha pt-3 text-[14px]">
+            <span className="text-ardosia">Valor total {rascunho ? 'estimado' : 'aprovado'}</span>
+            <strong className="leitura">{moeda(total)}</strong>
+          </p>
+        )}
+
         {/* Rodapé */}
-        <div className="border-t-2 border-linha pt-8 mt-12">
+        <div className="mt-12 border-t-2 border-linha pt-8">
           <div className="grid grid-cols-2 gap-16">
             <div>
-              <p className="text-xs text-ardosia mb-12">Assinatura do Comprador</p>
+              <p className="mb-12 text-xs text-ardosia">Assinatura do comprador</p>
               <div className="border-b border-ardosia-2" />
             </div>
             <div>
-              <p className="text-xs text-ardosia mb-12">Aprovação da Diretoria</p>
+              <p className="mb-12 text-xs text-ardosia">Aprovação da diretoria</p>
               <div className="border-b border-ardosia-2" />
             </div>
           </div>
-          <p className="text-xs text-ardosia-2 text-center mt-6">
-            Officinal Compras · Mapa de Cotação · {dataGeracao}
-          </p>
+          <p className="mt-6 text-center text-xs text-ardosia-2">Officinal Compras · Mapa de cotação · {dataGeracao}</p>
         </div>
       </div>
     </div>

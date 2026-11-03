@@ -39,7 +39,7 @@ export function ComparativoTable({ rows }: { rows: ComparativoRow[] }) {
     <section className="painel">
       <div className="painel-topo">
         <div>
-          <h2 className="painel-titulo">Melhor oferta por insumo</h2>
+          <h2 className="painel-titulo">Menor preço por insumo</h2>
           <p className="text-[12.5px] text-ardosia">
             {rows.length.toLocaleString('pt-BR')} insumo(s) com cotação vigente, preço na unidade base
           </p>
@@ -80,7 +80,7 @@ export function ComparativoTable({ rows }: { rows: ComparativoRow[] }) {
             <thead>
               <tr>
                 <th>Insumo</th>
-                <th>Melhor oferta</th>
+                <th>Menor preço</th>
                 <th className="num">Preço</th>
                 <th className="num">2º menor</th>
                 <th className="num">Diferença</th>
@@ -100,7 +100,7 @@ export function ComparativoTable({ rows }: { rows: ComparativoRow[] }) {
                   </td>
                   <td className="whitespace-nowrap">
                     <span className="inline-flex items-center gap-2">
-                      <span className="h-3.5 w-[3px] rounded-full bg-ambar" aria-hidden="true" />
+                      <span className="h-3.5 w-[3px] rounded-full bg-grafite/60" aria-hidden="true" />
                       {row.melhor_fornecedor}
                     </span>
                   </td>

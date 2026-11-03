@@ -5,6 +5,7 @@ import { Cabecalho } from '@/components/ui/Cabecalho'
 import { Indicadores } from '@/components/dashboard/Indicadores'
 
 const LISTAS = [
+  { titulo: 'Histórico de compras', desc: 'Tudo que foi aprovado, com preço, quantidade e valor; filtra por insumo, fornecedor e período.', href: '/compras' },
   { titulo: 'Mapas aprovados', desc: 'Abra o mapa e use “Imprimir” para gerar o PDF assinável.', href: '/mapas' },
   { titulo: 'Cotações recebidas', desc: 'Todas as tabelas de preço, com arquivo original e itens.', href: '/cotacoes' },
   { titulo: 'Fornecedores', desc: 'Dados cadastrais e situação de cada fornecedor.', href: '/fornecedores' },

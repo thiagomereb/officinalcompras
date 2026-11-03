@@ -284,31 +284,79 @@ export type Database = {
       }
       mapa_cotacao_itens: {
         Row: {
+          cotacao_id: string | null
           cotacao_item_id: string | null
           created_at: string | null
+          embalagem: number | null
+          fornecedor_nome: string | null
+          frete_fixo: number | null
           id: string
           insumo_id: string
+          insumo_nome: string | null
           justificativa: string | null
           mapa_id: string
-          quantidade: number
+          prazo_entrega_dias: number | null
+          prazo_pagamento_dias: number | null
+          preco_base: number | null
+          preco_unitario: number | null
+          quantidade: number | null
+          quantidade_unidade: string | null
+          score: number | null
+          sugerido: boolean | null
+          unidade: string | null
+          unidade_base: string | null
+          validade: string | null
+          valor_total: number | null
         }
         Insert: {
+          cotacao_id?: string | null
           cotacao_item_id?: string | null
           created_at?: string | null
+          embalagem?: number | null
+          fornecedor_nome?: string | null
+          frete_fixo?: number | null
           id?: string
           insumo_id: string
+          insumo_nome?: string | null
           justificativa?: string | null
           mapa_id: string
-          quantidade: number
+          prazo_entrega_dias?: number | null
+          prazo_pagamento_dias?: number | null
+          preco_base?: number | null
+          preco_unitario?: number | null
+          quantidade?: number | null
+          quantidade_unidade?: string | null
+          score?: number | null
+          sugerido?: boolean | null
+          unidade?: string | null
+          unidade_base?: string | null
+          validade?: string | null
+          valor_total?: number | null
         }
         Update: {
+          cotacao_id?: string | null
           cotacao_item_id?: string | null
           created_at?: string | null
+          embalagem?: number | null
+          fornecedor_nome?: string | null
+          frete_fixo?: number | null
           id?: string
           insumo_id?: string
+          insumo_nome?: string | null
           justificativa?: string | null
           mapa_id?: string
-          quantidade?: number
+          prazo_entrega_dias?: number | null
+          prazo_pagamento_dias?: number | null
+          preco_base?: number | null
+          preco_unitario?: number | null
+          quantidade?: number | null
+          quantidade_unidade?: string | null
+          score?: number | null
+          sugerido?: boolean | null
+          unidade?: string | null
+          unidade_base?: string | null
+          validade?: string | null
+          valor_total?: number | null
         }
         Relationships: [
           {
@@ -336,34 +384,55 @@ export type Database = {
       }
       mapas_cotacao: {
         Row: {
+          aprovado_em: string | null
+          aprovado_por: string | null
+          cancelado_em: string | null
+          cancelado_por: string | null
+          comparacao: Json | null
           cotacoes_ids: string[]
           created_at: string | null
           id: string
+          motivo_cancelamento: string | null
           pdf_url: string | null
           pesos: Json | null
           status: string
           titulo: string
           updated_at: string | null
+          valor_total: number | null
         }
         Insert: {
+          aprovado_em?: string | null
+          aprovado_por?: string | null
+          cancelado_em?: string | null
+          cancelado_por?: string | null
+          comparacao?: Json | null
           cotacoes_ids?: string[]
           created_at?: string | null
           id?: string
+          motivo_cancelamento?: string | null
           pdf_url?: string | null
           pesos?: Json | null
           status?: string
           titulo: string
           updated_at?: string | null
+          valor_total?: number | null
         }
         Update: {
+          aprovado_em?: string | null
+          aprovado_por?: string | null
+          cancelado_em?: string | null
+          cancelado_por?: string | null
+          comparacao?: Json | null
           cotacoes_ids?: string[]
           created_at?: string | null
           id?: string
+          motivo_cancelamento?: string | null
           pdf_url?: string | null
           pesos?: Json | null
           status?: string
           titulo?: string
           updated_at?: string | null
+          valor_total?: number | null
         }
         Relationships: []
       }
@@ -387,9 +456,41 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      historico_compras: {
+        Row: {
+          aprovado_em: string | null
+          aprovado_por: string | null
+          cotacao_id: string | null
+          cotacao_item_id: string | null
+          embalagem: number | null
+          fornecedor_nome: string | null
+          id: string | null
+          insumo_id: string | null
+          insumo_nome: string | null
+          mapa_id: string | null
+          mapa_titulo: string | null
+          preco_base: number | null
+          preco_unitario: number | null
+          quantidade: number | null
+          quantidade_unidade: string | null
+          sugerido: boolean | null
+          unidade: string | null
+          unidade_base: string | null
+          valor_total: number | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
+      aprovar_mapa: {
+        Args: {
+          p_comparacao: Json
+          p_itens: Json
+          p_mapa_id: string
+          p_valor_total: number
+        }
+        Returns: undefined
+      }
       buscar_insumo_por_descricao: {
         Args: { p_descricao: string; p_limite?: number }
         Returns: {

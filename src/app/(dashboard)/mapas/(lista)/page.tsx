@@ -8,26 +8,37 @@ const STATUS = {
   rascunho: { label: 'Rascunho', cls: '' },
   aprovado: { label: 'Aprovado', cls: 'selo-ok' },
   exportado: { label: 'Exportado', cls: 'selo-ok' },
+  cancelado: { label: 'Cancelado', cls: 'selo-alerta' },
 } as const
+
+const FUSO = 'America/Sao_Paulo'
+const moeda = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 
 export default async function MapasPage() {
   const supabase = await createClient()
   const { data: mapas } = await supabase
     .from('mapas_cotacao')
-    .select('*, mapa_cotacao_itens(id)')
+    .select('id, titulo, status, cotacoes_ids, created_at, aprovado_em, aprovado_por, valor_total, mapa_cotacao_itens(id)')
     .order('created_at', { ascending: false })
+
+  const rascunhos = mapas?.filter((m) => m.status === 'rascunho').length ?? 0
 
   return (
     <div className="pagina">
       <Cabecalho
         grupo="Compras"
         titulo="Mapas de cotação"
-        descricao={`${mapas?.length ?? 0} mapa(s)`}
+        descricao={`${mapas?.length ?? 0} mapa(s) · ${rascunhos} em rascunho`}
         acoes={
-          <Link href="/mapas/novo" className="btn btn-primario">
-            <Plus size={16} />
-            Novo mapa
-          </Link>
+          <>
+            <Link href="/compras" className="btn btn-secundario">
+              Histórico de compras
+            </Link>
+            <Link href="/mapas/novo" className="btn btn-primario">
+              <Plus size={16} />
+              Novo mapa
+            </Link>
+          </>
         }
       />
 
@@ -35,7 +46,7 @@ export default async function MapasPage() {
         <Vazio
           icone={GitCompare}
           titulo="Nenhum mapa de cotação"
-          texto="Um mapa compara as cotações escolhidas, insumo por insumo, e registra o fornecedor vencedor de cada um."
+          texto="Um mapa compara as cotações escolhidas, insumo por insumo. O comprador escolhe a oferta de cada um e aprova a compra."
           acao={
             <Link href="/mapas/novo" className="btn btn-primario btn-sm">
               Novo mapa
@@ -48,10 +59,11 @@ export default async function MapasPage() {
             <thead>
               <tr>
                 <th>Título</th>
-                <th className="num">Cotações</th>
-                <th className="num">Insumos escolhidos</th>
-                <th>Criado em</th>
                 <th>Situação</th>
+                <th className="num">Insumos escolhidos</th>
+                <th className="num">Valor</th>
+                <th>Aprovação</th>
+                <th>Criado em</th>
                 <th>
                   <span className="sr-only">Abrir</span>
                 </th>
@@ -63,19 +75,32 @@ export default async function MapasPage() {
                 const totalItens = (m.mapa_cotacao_itens as { id: string }[])?.length ?? 0
 
                 return (
-                  <tr key={m.id}>
+                  <tr key={m.id} className={m.status === 'cancelado' ? 'text-ardosia' : undefined}>
                     <td>
                       <Link href={`/mapas/${m.id}`} className="font-medium hover:underline">
                         {m.titulo}
                       </Link>
-                    </td>
-                    <td className="num text-ardosia">{m.cotacoes_ids.length}</td>
-                    <td className="num text-ardosia">{totalItens}</td>
-                    <td className="num whitespace-nowrap text-ardosia">
-                      {m.created_at ? new Date(m.created_at).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : '—'}
+                      <p className="text-[12px] text-ardosia">{m.cotacoes_ids.length} cotação(ões)</p>
                     </td>
                     <td>
                       <span className={`selo ${status.cls}`}>{status.label}</span>
+                    </td>
+                    <td className="num text-ardosia">{totalItens}</td>
+                    <td className="num leitura whitespace-nowrap">
+                      {m.valor_total != null ? moeda(m.valor_total) : <span className="text-ardosia-2">—</span>}
+                    </td>
+                    <td className="whitespace-nowrap text-[12.5px] text-ardosia">
+                      {m.aprovado_em ? (
+                        <>
+                          {new Date(m.aprovado_em).toLocaleDateString('pt-BR', { timeZone: FUSO })}
+                          {m.aprovado_por && <p className="max-w-[200px] truncate">{m.aprovado_por}</p>}
+                        </>
+                      ) : (
+                        <span className="text-ardosia-2">—</span>
+                      )}
+                    </td>
+                    <td className="num whitespace-nowrap text-ardosia">
+                      {m.created_at ? new Date(m.created_at).toLocaleDateString('pt-BR', { timeZone: FUSO }) : '—'}
                     </td>
                     <td className="w-10">
                       <Link

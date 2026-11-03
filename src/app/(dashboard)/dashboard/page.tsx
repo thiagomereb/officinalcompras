@@ -46,11 +46,14 @@ export default async function DashboardPage() {
   const agora = new Date()
   const today = dataISO(agora)
   const in7Days = dataISO(new Date(agora.getTime() + 7 * 86_400_000))
+  // Primeiro dia do mês em Brasília (UTC-3)
+  const inicioMes = `${today.slice(0, 8)}01T00:00:00-03:00`
 
   const [
     { count: totalInsumos },
     rawItems,
     { data: cotacoesVencendo },
+    comprasMes,
   ] = await Promise.all([
     supabase.from('insumos').select('*', { count: 'exact', head: true }),
     buscarTodos((de, ate) =>
@@ -72,7 +75,18 @@ export default async function DashboardPage() {
       .not('validade_cotacao', 'is', null)
       .gte('validade_cotacao', today)
       .lte('validade_cotacao', in7Days),
+    buscarTodos((de, ate) =>
+      supabase
+        .from('historico_compras')
+        .select('id, mapa_id, valor_total')
+        .gte('aprovado_em', inicioMes)
+        .order('id')
+        .range(de, ate),
+    ),
   ])
+
+  const valorComprasMes = comprasMes.reduce((soma, c) => soma + (c.valor_total ?? 0), 0)
+  const mapasNoMes = new Set(comprasMes.map((c) => c.mapa_id)).size
 
   const itemPorId = new Map(rawItems.map((r) => [r.id, r]))
   const casPorInsumo = new Map(
@@ -161,7 +175,6 @@ export default async function DashboardPage() {
     .slice(0, 5)
     .map(([nome, wins]) => ({ nome, wins, total: grupos.length }))
 
-  const topFornecedor = rankingItems[0]?.nome ?? '—'
 
   // Alerts
   const alertas: Alerta[] = []
@@ -256,10 +269,11 @@ export default async function DashboardPage() {
             detalhe: `com 2+ fornecedores, de ${(totalInsumos ?? 0).toLocaleString('pt-BR')} cadastrados`,
           },
           {
-            rotulo: 'Fornecedor líder',
-            valor: topFornecedor,
-            texto: true,
-            detalhe: rankingItems[0] ? `melhor oferta em ${rankingItems[0].wins} insumo(s)` : 'sem cotações vigentes',
+            rotulo: 'Compras no mês',
+            valor: valorComprasMes.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 }),
+            detalhe: comprasMes.length
+              ? `${comprasMes.length} item(ns) em ${mapasNoMes} mapa(s) aprovado(s)`
+              : 'nenhum mapa aprovado este mês',
           },
           {
             rotulo: 'Alertas',

@@ -172,10 +172,10 @@ export default async function CotacaoPage({ params, searchParams }: { params: Pr
               const maisCaro = pctMaisCaro.get(item.id)
 
               return (
-                <tr key={item.id} className={eMaisBarato ? 'escolhido' : undefined}>
+                <tr key={item.id}>
                   <td className="max-w-[240px]">
                     <div className="truncate" title={item.descricao_original}>{item.descricao_original}</div>
-                    {eMaisBarato && <span className="selo selo-ambar mt-1">menor preço entre as duplicatas</span>}
+                    {eMaisBarato && <span className="selo mt-1">menor preço entre as duplicatas</span>}
                     {maisCaro != null && (
                       <span className="selo selo-alerta mt-1">+{maisCaro.toFixed(0)}% que a duplicata</span>
                     )}

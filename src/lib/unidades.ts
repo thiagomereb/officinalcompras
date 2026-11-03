@@ -7,6 +7,7 @@ const SINONIMOS_UNIDADE: Record<string, string> = {
   kg: 'kg', kgs: 'kg', kilo: 'kg', quilo: 'kg', quilograma: 'kg', quilogramas: 'kg',
   ml: 'mL', mililitro: 'mL', mililitros: 'mL',
   l: 'L', lt: 'L', lts: 'L', litro: 'L', litros: 'L',
+  kl: 'kL', quilolitro: 'kL', quilolitros: 'kL',
   mcg: 'mcg', µg: 'mcg', ug: 'mcg', micrograma: 'mcg', microgramas: 'mcg',
   ui: 'UI', un: 'un', und: 'un', unid: 'un', unidade: 'un', unidades: 'un',
   caps: 'cáps', cáps: 'cáps', capsula: 'cáps', cápsula: 'cáps', capsulas: 'cáps', cápsulas: 'cáps',
@@ -30,6 +31,7 @@ const PARA_BASE: Record<string, { base: string; fator: number }> = {
   kg: { base: 'g', fator: 1000 },
   mL: { base: 'mL', fator: 1 },
   L: { base: 'mL', fator: 1000 },
+  kL: { base: 'mL', fator: 1_000_000 },
 }
 
 export type PrecoBase = {
@@ -52,6 +54,20 @@ export function precoPorUnidadeBase(
   const conv = u ? PARA_BASE[u] : undefined
   if (conv) return { valor: preco / (qtd * conv.fator), base: conv.base }
   return { valor: preco / qtd, base: u }
+}
+
+// Unidades em que o comprador informa quanto vai comprar no mapa
+export const UNIDADES_QUANTIDADE = ['mg', 'g', 'kg', 'mL', 'L', 'kL'] as const
+export type UnidadeQuantidade = (typeof UNIDADES_QUANTIDADE)[number]
+
+export function ehUnidadeQuantidade(u: unknown): u is UnidadeQuantidade {
+  return typeof u === 'string' && (UNIDADES_QUANTIDADE as readonly string[]).includes(u)
+}
+
+// Quantidade comprada convertida para a base da grandeza (g ou mL)
+export function quantidadeNaBase(quantidade: number, unidade: UnidadeQuantidade): { valor: number; base: string } {
+  const conv = PARA_BASE[unidade]
+  return { valor: quantidade * conv.fator, base: conv.base }
 }
 
 export function formatarPrecoBase({ valor, base }: PrecoBase): string {
