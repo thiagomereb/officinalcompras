@@ -272,14 +272,55 @@ export async function vincularItensAutomatico(cotacaoId: string): Promise<{ vinc
   return { vinculados }
 }
 
-export async function vincularItemManualmente(itemId: string, insumoId: string, cotacaoId: string): Promise<Falha | void> {
+export type ResultadoVinculo = { mapasAfetados: string[] } | Falha
+
+// Troca (ou remove, com insumoId null) o insumo de um item — para corrigir
+// vínculos automáticos errados. Se o item estava escolhido num mapa em
+// rascunho, essa escolha foi feita sob o insumo errado e é desfeita; mapas
+// aprovados guardam a cópia congelada e não mudam.
+export async function alterarVinculo(
+  itemId: string,
+  insumoId: string | null,
+  cotacaoId: string,
+): Promise<ResultadoVinculo> {
   const supabase = await createClient()
-  const { error } = await supabase
+
+  const { data: item, error: erroItem } = await supabase
     .from('cotacao_itens')
-    .update({ insumo_id: insumoId })
+    .select('insumo_id')
     .eq('id', itemId)
+    .single()
+  if (erroItem || !item) return { erro: 'Item não encontrado.' }
+  if (item.insumo_id === insumoId) return { mapasAfetados: [] }
+
+  const { data: escolhas, error: erroEscolhas } = await supabase
+    .from('mapa_cotacao_itens')
+    .select('id, mapas_cotacao(titulo, status)')
+    .eq('cotacao_item_id', itemId)
+  if (erroEscolhas) return { erro: erroEscolhas.message }
+
+  const emRascunho = (escolhas ?? []).filter(
+    (e) => (e.mapas_cotacao as { status: string } | null)?.status === 'rascunho',
+  )
+  if (emRascunho.length) {
+    const { error } = await supabase.from('mapa_cotacao_itens').delete().in('id', emRascunho.map((e) => e.id))
+    if (error) return { erro: error.message }
+  }
+
+  const { error } = await supabase.from('cotacao_itens').update({ insumo_id: insumoId }).eq('id', itemId)
   if (error) return { erro: error.message }
+
   revalidatePath(`/cotacoes/${cotacaoId}`)
+  revalidatePath('/dashboard')
+  if (emRascunho.length) revalidatePath('/mapas', 'layout')
+  return {
+    mapasAfetados: emRascunho.map((e) => (e.mapas_cotacao as { titulo: string } | null)?.titulo ?? 'mapa'),
+  }
+}
+
+export async function vincularItemManualmente(itemId: string, insumoId: string, cotacaoId: string): Promise<Falha | void> {
+  const resultado = await alterarVinculo(itemId, insumoId, cotacaoId)
+  if ('erro' in resultado) return resultado
 }
 
 export async function removerTodosItens(cotacaoId: string): Promise<Falha | void> {

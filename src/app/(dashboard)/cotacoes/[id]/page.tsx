@@ -8,7 +8,8 @@ import type { Tables } from '@/types/database'
 import { CotacaoForm } from '@/components/cotacoes/CotacaoForm'
 import { AdicionarItemForm } from '@/components/cotacoes/AdicionarItemForm'
 import { RemoverItemButton } from '@/components/cotacoes/RemoverItemButton'
-import { atualizarCotacao, adicionarItem, removerItem, excluirCotacao, removerTodosItens, vincularItensAutomatico, vincularItemManualmente } from '../actions'
+import { atualizarCotacao, adicionarItem, removerItem, excluirCotacao, removerTodosItens, vincularItensAutomatico, vincularItemManualmente, alterarVinculo } from '../actions'
+import { EditarVinculo } from '@/components/cotacoes/EditarVinculo'
 import { VincularManualmente } from '@/components/cotacoes/VincularManualmente'
 import { ExcluirCotacaoButton } from './ExcluirCotacaoButton'
 import { OcrButton } from '@/components/cotacoes/OcrButton'
@@ -172,7 +173,7 @@ export default async function CotacaoPage({ params, searchParams }: { params: Pr
               const maisCaro = pctMaisCaro.get(item.id)
 
               return (
-                <tr key={item.id}>
+                <tr key={item.id} className="group/linha">
                   <td className="max-w-[240px]">
                     <div className="truncate" title={item.descricao_original}>{item.descricao_original}</div>
                     {eMaisBarato && <span className="selo mt-1">menor preço entre as duplicatas</span>}
@@ -181,11 +182,12 @@ export default async function CotacaoPage({ params, searchParams }: { params: Pr
                     )}
                   </td>
                   <td>
-                    {insumo ? (
-                      <span className="font-medium">{insumo.nome_padrao}</span>
-                    ) : (
-                      <span className="text-ardosia-2">sem vínculo</span>
-                    )}
+                    <EditarVinculo
+                      itemId={item.id}
+                      cotacaoId={id}
+                      insumoNome={insumo?.nome_padrao ?? null}
+                      action={alterarVinculo}
+                    />
                   </td>
                   <td className="num">{item.quantidade_minima ?? item.quantidade ?? '—'}</td>
                   <td className="text-ardosia">{item.unidade ?? '—'}</td>

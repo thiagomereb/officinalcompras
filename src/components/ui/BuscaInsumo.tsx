@@ -16,6 +16,10 @@ interface Props {
 
 // Espera entre teclas antes de consultar o banco
 const ESPERA_MS = 180
+// Altura máxima da lista (max-h-64) mais folga: abaixo disso, abre para cima
+const ALTURA_LISTA = 270
+
+type Posicao = { left: number; width: number; top?: number; bottom?: number }
 
 export function BuscaInsumo({
   name,
@@ -33,7 +37,10 @@ export function BuscaInsumo({
   const [carregando, setCarregando] = useState(false)
   const [erro, setErro] = useState<string | null>(null)
   const [escolhido, setEscolhido] = useState<InsumoOpcao | null>(null)
+  const [posicao, setPosicao] = useState<Posicao | null>(null)
   const caixa = useRef<HTMLDivElement>(null)
+  const campo = useRef<HTMLInputElement>(null)
+  const lista = useRef<HTMLUListElement>(null)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
   // Numera as consultas: resposta que chega depois de uma mais nova é descartada
   const consulta = useRef(0)
@@ -48,6 +55,44 @@ export function BuscaInsumo({
       if (timer.current) clearTimeout(timer.current)
     }
   }, [])
+
+  // Posição da lista a partir do campo; abre para cima se faltar espaço embaixo
+  function calcularPosicao(): Posicao | null {
+    const r = campo.current?.getBoundingClientRect()
+    if (!r) return null
+    const abaixo = window.innerHeight - r.bottom
+    return abaixo < ALTURA_LISTA && r.top > abaixo
+      ? { left: r.left, width: r.width, bottom: window.innerHeight - r.top + 4 }
+      : { left: r.left, width: r.width, top: r.bottom + 4 }
+  }
+
+  // A lista flutua com posição fixa (para não ser cortada por tabelas com
+  // rolagem e diálogos), então acompanha o campo quando a página rola ou a
+  // janela muda de tamanho — no celular isso acontece quando o teclado abre.
+  // Só fecha se o campo sair da tela.
+  useEffect(() => {
+    if (!aberto) return
+    function acompanhar(e: Event) {
+      if (e.target instanceof Node && lista.current?.contains(e.target)) return
+      const r = campo.current?.getBoundingClientRect()
+      if (!r || r.bottom < 0 || r.top > window.innerHeight) {
+        setAberto(false)
+        return
+      }
+      setPosicao(calcularPosicao())
+    }
+    window.addEventListener('scroll', acompanhar, true)
+    window.addEventListener('resize', acompanhar)
+    return () => {
+      window.removeEventListener('scroll', acompanhar, true)
+      window.removeEventListener('resize', acompanhar)
+    }
+  }, [aberto])
+
+  function abrir() {
+    setPosicao(calcularPosicao())
+    setAberto(true)
+  }
 
   function aoDigitar(valor: string) {
     setTexto(valor)
@@ -71,12 +116,12 @@ export function BuscaInsumo({
         if (n !== consulta.current) return
         setOpcoes(resultado)
         setAtivo(0)
-        setAberto(true)
+        abrir()
       } catch (e) {
         if (n !== consulta.current) return
         setErro((e as Error).message)
         setOpcoes([])
-        setAberto(true)
+        abrir()
       } finally {
         if (n === consulta.current) setCarregando(false)
       }
@@ -93,7 +138,7 @@ export function BuscaInsumo({
   function aoTeclar(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key === 'ArrowDown') {
       e.preventDefault()
-      if (opcoes.length) setAberto(true)
+      if (opcoes.length) abrir()
       setAtivo((a) => Math.min(a + 1, opcoes.length - 1))
     } else if (e.key === 'ArrowUp') {
       e.preventDefault()
@@ -117,6 +162,7 @@ export function BuscaInsumo({
         className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ardosia-2"
       />
       <input
+        ref={campo}
         role="combobox"
         aria-expanded={aberto}
         aria-controls={idLista}
@@ -126,7 +172,7 @@ export function BuscaInsumo({
         onChange={(e) => aoDigitar(e.target.value)}
         onKeyDown={aoTeclar}
         onFocus={() => {
-          if (opcoes.length && !escolhido) setAberto(true)
+          if (opcoes.length && !escolhido) abrir()
         }}
         placeholder={placeholder}
         disabled={desabilitado}
@@ -143,11 +189,14 @@ export function BuscaInsumo({
         )
       )}
 
-      {aberto && (
+      {aberto && posicao && (
         <ul
+          ref={lista}
           id={idLista}
           role="listbox"
-          className="absolute left-0 right-0 top-full z-30 mt-1 max-h-64 overflow-y-auto rounded-lg border border-linha bg-papel py-1 shadow-lg shadow-grafite/5"
+          style={{ position: 'fixed', ...posicao }}
+          // whitespace-normal: dentro de tabelas a lista herdaria o nowrap das células
+          className="z-[60] max-h-64 overflow-y-auto overflow-x-hidden whitespace-normal rounded-lg border border-linha bg-papel py-1 shadow-lg shadow-grafite/5"
         >
           {erro ? (
             <li className="px-3 py-2 text-[13px] text-oxido">Não foi possível buscar: {erro}</li>
