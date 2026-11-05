@@ -7,6 +7,7 @@ import type { ItemExtraido, PreparoExtracao } from '@/lib/ocr'
 import { extrairItensExcel } from '@/lib/excel'
 import { getArquivoSignedUrl, removerArquivos } from '@/lib/supabase/storage'
 import { normalizarUnidade } from '@/lib/unidades'
+import { formatarCas, normalizarCas } from '@/lib/cas'
 import { mensagemErroBanco, type Falha } from '@/lib/acoes'
 
 type Supabase = Awaited<ReturnType<typeof createClient>>
@@ -146,7 +147,8 @@ async function gravarItens(
       ipi: item.ipi ?? 0,
       st: item.st ?? 0,
       validade: item.validade,
-      cas: item.cas ?? null,
+      // Planilha costuma trazer o CAS só em dígitos; o que não confere fica como veio
+      cas: formatarCas(item.cas),
       insumo_id: null,
     })),
   )
@@ -215,6 +217,8 @@ export async function adicionarItem(cotacaoId: string, formData: FormData): Prom
   const preco = numeroOuNulo(formData.get('preco_unitario'))
   if (!descricao) return { erro: 'Informe a descrição do item.' }
   if (preco === null || preco <= 0) return { erro: 'Informe um preço maior que zero.' }
+  const cas = normalizarCas(textoOuNulo(formData.get('cas')))
+  if (!cas.ok) return { erro: cas.erro }
 
   let insumo_id = textoOuNulo(formData.get('insumo_id'))
 
@@ -241,7 +245,7 @@ export async function adicionarItem(cotacaoId: string, formData: FormData): Prom
     pais_origem: textoOuNulo(formData.get('pais_origem')),
     ipi: numeroOuNulo(formData.get('ipi')) ?? 0,
     st: numeroOuNulo(formData.get('st')) ?? 0,
-    cas: textoOuNulo(formData.get('cas')),
+    cas: cas.cas,
   })
 
   if (error) return { erro: error.message }
@@ -254,6 +258,30 @@ export async function adicionarItem(cotacaoId: string, formData: FormData): Prom
     .eq('status', 'processando')
 
   revalidatePath(`/cotacoes/${cotacaoId}`)
+}
+
+// Corrige ou informa o CAS de um item (OCR que leu errado, planilha sem CAS).
+// Vazio apaga; devolve o CAS como foi gravado, já no formato padrão.
+export async function alterarCasItem(
+  itemId: string,
+  cotacaoId: string,
+  cas: string,
+): Promise<{ cas: string | null } | Falha> {
+  const normalizado = normalizarCas(typeof cas === 'string' ? cas : '')
+  if (!normalizado.ok) return { erro: normalizado.erro }
+
+  const supabase = await createClient()
+  const { data, error } = await supabase
+    .from('cotacao_itens')
+    .update({ cas: normalizado.cas })
+    .eq('id', itemId)
+    .eq('cotacao_id', cotacaoId)
+    .select('id')
+  if (error) return { erro: error.message }
+  if (!data?.length) return { erro: 'Item não encontrado.' }
+
+  revalidatePath(`/cotacoes/${cotacaoId}`)
+  return { cas: normalizado.cas }
 }
 
 export async function removerItem(id: string, cotacaoId: string): Promise<Falha | void> {

@@ -173,7 +173,7 @@ export function AdicionarItemForm({ cotacaoId, action }: Props) {
 
             <div>
               <label htmlFor={campo('cas')} className="legenda">CAS</label>
-              <input id={campo('cas')} name="cas" className="campo leitura" placeholder="50-81-7" />
+              <input id={campo('cas')} name="cas" maxLength={100} className="campo leitura" placeholder="50-81-7" />
             </div>
 
             <div>
