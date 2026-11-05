@@ -13,8 +13,14 @@ type Supabase = Awaited<ReturnType<typeof createClient>>
 
 const EXTENSOES_EXCEL = ['xlsx', 'xls']
 
-// Similaridade mínima (pg_trgm) para vincular um item a um insumo sem revisão
-const LIMIAR_VINCULO = 0.45
+// Similaridade mínima (pg_trgm) para vincular um item a um insumo sem revisão.
+// Era 0,45 e deixava passar erros como "VITAMINA C PO" → "Vitamina E" (0,56).
+// Medido nos itens já vinculados (nov/2026): a 0,6 quase todo vínculo
+// automático confere com o atual; o resto fica para vínculo manual, e cada
+// correção vira sinônimo (aprenderVinculo), então volta a ser automático.
+const LIMIAR_VINCULO = 0.6
+// Sinônimo aprendido é a descrição do fornecedor; acima disso é ruído do arquivo
+const LIMITE_SINONIMO = 200
 
 // Formato dos paths gerados por enviarArquivoCotacao (lib/supabase/upload.ts).
 // Como o path chega do navegador, só aceita objetos na raiz do bucket.
@@ -272,26 +278,72 @@ export async function vincularItensAutomatico(cotacaoId: string): Promise<{ vinc
   return { vinculados }
 }
 
-export type ResultadoVinculo = { mapasAfetados: string[] } | Falha
+export type Aprendizado = { sinonimo: string; removidoDe: string[] }
+export type ResultadoVinculo = { mapasAfetados: string[]; aprendizado: Aprendizado | null } | Falha
+
+// O comprador acabou de dizer que esta descrição é deste insumo: grava como
+// sinônimo, para o vínculo automático acertar na próxima cotação. Se o mesmo
+// texto era sinônimo de outro insumo, era ele que causava o vínculo errado —
+// sai de lá.
+async function aprenderVinculo(supabase: Supabase, descricao: string, insumoId: string): Promise<Aprendizado | null> {
+  const texto = descricao.trim().replace(/\s+/g, ' ').slice(0, LIMITE_SINONIMO)
+  if (!texto) return null
+
+  // ilike sem curinga funciona como igualdade sem diferenciar maiúscula;
+  // % e _ do próprio texto precisam ser escapados
+  const padrao = texto.replace(/[\\%_]/g, (c) => `\\${c}`)
+  const [{ data: insumo }, { data: iguais }] = await Promise.all([
+    supabase.from('insumos').select('nome_padrao').eq('id', insumoId).single(),
+    supabase.from('insumo_sinonimos').select('id, insumo_id, insumos(nome_padrao)').ilike('sinonimo', padrao),
+  ])
+  if (insumo?.nome_padrao.trim().toLowerCase() === texto.toLowerCase()) return null
+
+  const deOutros = (iguais ?? []).filter((s) => s.insumo_id !== insumoId)
+  if (deOutros.length) {
+    const { error } = await supabase.from('insumo_sinonimos').delete().in('id', deOutros.map((s) => s.id))
+    if (error) throw new Error(error.message)
+  }
+  if (!(iguais ?? []).some((s) => s.insumo_id === insumoId)) {
+    const { error } = await supabase.from('insumo_sinonimos').insert({ insumo_id: insumoId, sinonimo: texto })
+    if (error) throw new Error(error.message)
+  }
+
+  return {
+    sinonimo: texto,
+    removidoDe: deOutros.map((s) => (s.insumos as { nome_padrao: string } | null)?.nome_padrao ?? 'outro insumo'),
+  }
+}
 
 // Troca (ou remove, com insumoId null) o insumo de um item — para corrigir
 // vínculos automáticos errados. Se o item estava escolhido num mapa em
 // rascunho, essa escolha foi feita sob o insumo errado e é desfeita; mapas
-// aprovados guardam a cópia congelada e não mudam.
+// aprovados guardam a cópia congelada e não mudam. Com lembrar, a descrição
+// vira sinônimo do insumo escolhido.
 export async function alterarVinculo(
   itemId: string,
   insumoId: string | null,
   cotacaoId: string,
+  lembrar = false,
 ): Promise<ResultadoVinculo> {
   const supabase = await createClient()
 
   const { data: item, error: erroItem } = await supabase
     .from('cotacao_itens')
-    .select('insumo_id')
+    .select('insumo_id, descricao_original')
     .eq('id', itemId)
     .single()
   if (erroItem || !item) return { erro: 'Item não encontrado.' }
-  if (item.insumo_id === insumoId) return { mapasAfetados: [] }
+
+  let aprendizado: Aprendizado | null = null
+  if (lembrar && insumoId) {
+    try {
+      aprendizado = await aprenderVinculo(supabase, item.descricao_original, insumoId)
+    } catch (err) {
+      return { erro: `Não foi possível guardar o sinônimo: ${(err as Error).message}` }
+    }
+    if (aprendizado) revalidatePath('/insumos', 'layout')
+  }
+  if (item.insumo_id === insumoId) return { mapasAfetados: [], aprendizado }
 
   const { data: escolhas, error: erroEscolhas } = await supabase
     .from('mapa_cotacao_itens')
@@ -315,11 +367,17 @@ export async function alterarVinculo(
   if (emRascunho.length) revalidatePath('/mapas', 'layout')
   return {
     mapasAfetados: emRascunho.map((e) => (e.mapas_cotacao as { titulo: string } | null)?.titulo ?? 'mapa'),
+    aprendizado,
   }
 }
 
-export async function vincularItemManualmente(itemId: string, insumoId: string, cotacaoId: string): Promise<Falha | void> {
-  const resultado = await alterarVinculo(itemId, insumoId, cotacaoId)
+export async function vincularItemManualmente(
+  itemId: string,
+  insumoId: string,
+  cotacaoId: string,
+  lembrar = false,
+): Promise<Falha | void> {
+  const resultado = await alterarVinculo(itemId, insumoId, cotacaoId, lembrar)
   if ('erro' in resultado) return resultado
 }
 

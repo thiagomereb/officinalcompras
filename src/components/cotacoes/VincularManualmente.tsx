@@ -14,18 +14,19 @@ type Item = {
   quantidade_minima: number | null
 }
 
-type VincularAction = (itemId: string, insumoId: string, cotacaoId: string) => Promise<Falha | void>
+type VincularAction = (itemId: string, insumoId: string, cotacaoId: string, lembrar: boolean) => Promise<Falha | void>
 
 interface RowProps {
   item: Item
   cotacaoId: string
   action: VincularAction
+  lembrar: boolean
   onAlterado: (itemId: string, vinculado: boolean) => void
 }
 
 const moeda = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 
-function ItemRow({ item, cotacaoId, action, onAlterado }: RowProps) {
+function ItemRow({ item, cotacaoId, action, lembrar, onAlterado }: RowProps) {
   const [vinculadoNome, setVinculadoNome] = useState<string | null>(null)
   const [erro, setErro] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
@@ -35,7 +36,7 @@ function ItemRow({ item, cotacaoId, action, onAlterado }: RowProps) {
     setErro(null)
     onAlterado(item.id, true)
     startTransition(async () => {
-      const resultado = await action(item.id, insumo.id, cotacaoId)
+      const resultado = await action(item.id, insumo.id, cotacaoId, lembrar)
       if (resultado?.erro) {
         // Desfaz o otimismo da interface: o vínculo não foi gravado
         setVinculadoNome(null)
@@ -86,6 +87,9 @@ interface Props {
 
 export function VincularManualmente({ itens, cotacaoId, action }: Props) {
   const [filtroDesc, setFiltroDesc] = useState('')
+  // Vínculo feito à mão é justamente o que o automático não acertou: vira
+  // sinônimo para a próxima cotação já entrar vinculada
+  const [lembrar, setLembrar] = useState(true)
   const [vinculadosLocal, setVinculadosLocal] = useState<Set<string>>(new Set())
 
   function onAlterado(itemId: string, vinculado: boolean) {
@@ -107,12 +111,18 @@ export function VincularManualmente({ itens, cotacaoId, action }: Props) {
   return (
     <div>
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-linha-2 px-4 py-3">
-        <p className="text-[13px] text-ardosia">
-          <span className="font-medium text-grafite">{pendentes}</span> item(ns) sem insumo
-          {vinculadosLocal.size > 0 && (
-            <span className="ml-2 text-salvia">· {vinculadosLocal.size} vinculado(s) agora</span>
-          )}
-        </p>
+        <div>
+          <p className="text-[13px] text-ardosia">
+            <span className="font-medium text-grafite">{pendentes}</span> item(ns) sem insumo
+            {vinculadosLocal.size > 0 && (
+              <span className="ml-2 text-salvia">· {vinculadosLocal.size} vinculado(s) agora</span>
+            )}
+          </p>
+          <label className="mt-1 flex cursor-pointer items-center gap-2 text-[12px] text-ardosia">
+            <input type="checkbox" checked={lembrar} onChange={(e) => setLembrar(e.target.checked)} className="h-3.5 w-3.5" />
+            Usar estes vínculos nas próximas cotações (a descrição vira sinônimo do insumo)
+          </label>
+        </div>
         <input
           type="text"
           value={filtroDesc}
@@ -142,6 +152,7 @@ export function VincularManualmente({ itens, cotacaoId, action }: Props) {
                 item={item}
                 cotacaoId={cotacaoId}
                 action={action}
+                lembrar={lembrar}
                 onAlterado={onAlterado}
               />
             ))}
