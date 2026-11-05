@@ -1,5 +1,5 @@
 ﻿import { notFound } from 'next/navigation'
-import { Paperclip, AlertTriangle, ChevronDown, FileText } from 'lucide-react'
+import { Paperclip, AlertTriangle, ChevronDown, FileText, FileDown } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { getArquivoSignedUrl } from '@/lib/supabase/storage'
 import { buscarTodos } from '@/lib/supabase/consultas'
@@ -261,6 +261,10 @@ export default async function CotacaoPage({ params, searchParams }: { params: Pr
                 <span className="truncate">{cotacao.arquivo_nome ?? 'Arquivo'}</span>
               </a>
             )}
+            <a href={`/cotacoes/${id}/pdf`} download className="btn btn-secundario btn-sm">
+              <FileDown size={14} />
+              Baixar PDF
+            </a>
             <ExcluirCotacaoButton id={id} action={excluirCotacao} />
           </>
         }

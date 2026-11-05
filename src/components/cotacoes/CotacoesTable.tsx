@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useTransition } from 'react'
 import Link from 'next/link'
-import { Search, Paperclip, Sparkles, ArrowUpRight, FileText } from 'lucide-react'
+import { Search, Paperclip, Sparkles, ArrowUpRight, FileText, FileDown } from 'lucide-react'
 import { prepararExtracao } from '@/app/(dashboard)/cotacoes/actions'
 import { concluirExtracao } from '@/lib/ocr-browser'
 import { ehFalha } from '@/lib/acoes'
@@ -247,6 +247,15 @@ export function CotacoesTable({ cotacoes }: { cotacoes: CotacaoRow[] }) {
                             <Paperclip size={14} />
                           </a>
                         )}
+                        <a
+                          href={`/cotacoes/${c.id}/pdf`}
+                          download
+                          className="btn btn-fantasma btn-icone btn-sm"
+                          title="Baixar PDF"
+                          aria-label={`Baixar PDF da cotação de ${c.fornecedorNome}`}
+                        >
+                          <FileDown size={14} />
+                        </a>
                         <Link
                           href={`/cotacoes/${c.id}`}
                           className="btn btn-fantasma btn-icone btn-sm"

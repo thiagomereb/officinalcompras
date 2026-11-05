@@ -1,6 +1,6 @@
 ﻿import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
-import { Plus, GitCompare, ArrowUpRight } from 'lucide-react'
+import { Plus, GitCompare, ArrowUpRight, FileDown } from 'lucide-react'
 import { Cabecalho } from '@/components/ui/Cabecalho'
 import { Vazio } from '@/components/ui/Vazio'
 
@@ -102,15 +102,26 @@ export default async function MapasPage() {
                     <td className="num whitespace-nowrap text-ardosia">
                       {m.created_at ? new Date(m.created_at).toLocaleDateString('pt-BR', { timeZone: FUSO }) : '—'}
                     </td>
-                    <td className="w-10">
-                      <Link
-                        href={`/mapas/${m.id}`}
-                        className="btn btn-fantasma btn-icone btn-sm"
-                        aria-label={`Abrir ${m.titulo}`}
-                        title="Abrir mapa"
-                      >
-                        <ArrowUpRight size={15} />
-                      </Link>
+                    <td>
+                      <div className="flex items-center justify-end gap-1">
+                        <a
+                          href={`/mapas/${m.id}/pdf`}
+                          download
+                          className="btn btn-fantasma btn-icone btn-sm"
+                          aria-label={`Baixar PDF de ${m.titulo}`}
+                          title="Baixar PDF"
+                        >
+                          <FileDown size={14} />
+                        </a>
+                        <Link
+                          href={`/mapas/${m.id}`}
+                          className="btn btn-fantasma btn-icone btn-sm"
+                          aria-label={`Abrir ${m.titulo}`}
+                          title="Abrir mapa"
+                        >
+                          <ArrowUpRight size={15} />
+                        </Link>
+                      </div>
                     </td>
                   </tr>
                 )

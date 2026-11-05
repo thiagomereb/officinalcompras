@@ -69,14 +69,3 @@ export function quantidadeNaBase(quantidade: number, unidade: UnidadeQuantidade)
   const conv = PARA_BASE[unidade]
   return { valor: quantidade * conv.fator, base: conv.base }
 }
-
-export function formatarPrecoBase({ valor, base }: PrecoBase): string {
-  const casas = valor < 1 ? 4 : 2
-  const texto = valor.toLocaleString('pt-BR', {
-    style: 'currency',
-    currency: 'BRL',
-    minimumFractionDigits: casas,
-    maximumFractionDigits: casas,
-  })
-  return base ? `${texto}/${base}` : texto
-}

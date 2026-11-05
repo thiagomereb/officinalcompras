@@ -1,6 +1,8 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import type { Database } from '@/types/database'
-import { calcularScores, agruparPorInsumo, type CandidatoSemScore, type GrupoInsumo, type Pesos } from './comparacao'
+import type { Database, Tables } from '@/types/database'
+import { calcularScores, agruparPorInsumo, PESOS_PADRAO, type CandidatoSemScore, type GrupoInsumo, type Pesos } from './comparacao'
+import { ehComparacaoCongelada, valorEstimado } from './compras'
+import { ehUnidadeQuantidade, type UnidadeQuantidade } from './unidades'
 import { buscarTodos, emLotes } from './supabase/consultas'
 
 type Fornecedor = { razao_social: string; nome_fantasia: string | null } | null
@@ -103,4 +105,63 @@ export async function carregarUltimasCompras(
     }
   }
   return ultimas
+}
+
+export type EscolhaDocumento = {
+  cotacao_item_id: string
+  quantidade: number | null
+  quantidade_unidade: UnidadeQuantidade | null
+  valor: number | null
+}
+
+export type DocumentoMapa = {
+  mapa: Tables<'mapas_cotacao'>
+  rascunho: boolean
+  pesos: Pesos
+  grupos: GrupoInsumo[]
+  escolhas: Map<string, EscolhaDocumento>
+  // Rascunho: soma estimada na hora; aprovado: o valor gravado na aprovação
+  total: number | null
+}
+
+// Tudo que o documento do mapa (PDF) precisa. Aprovado sai da cópia
+// congelada, como a tela; rascunho é calculado com os dados atuais.
+export async function carregarDocumentoMapa(
+  supabase: SupabaseClient<Database>,
+  id: string,
+): Promise<DocumentoMapa | null> {
+  const { data: mapa } = await supabase.from('mapas_cotacao').select('*').eq('id', id).single()
+  if (!mapa) return null
+
+  const rascunho = mapa.status === 'rascunho'
+  const congelada = ehComparacaoCongelada(mapa.comparacao) ? mapa.comparacao : null
+  const pesos: Pesos = congelada?.pesos ?? (mapa.pesos as Pesos | null) ?? PESOS_PADRAO
+
+  const [grupos, { data: linhas }] = await Promise.all([
+    congelada && !rascunho ? Promise.resolve(congelada.grupos) : carregarGruposMapa(supabase, mapa.cotacoes_ids, pesos),
+    supabase
+      .from('mapa_cotacao_itens')
+      .select('insumo_id, cotacao_item_id, quantidade, quantidade_unidade, valor_total')
+      .eq('mapa_id', id),
+  ])
+
+  const candidatoPorItem = new Map(grupos.flatMap((g) => g.candidatos.map((c) => [c.cotacao_item_id, c] as const)))
+  const escolhas = new Map<string, EscolhaDocumento>()
+  for (const l of linhas ?? []) {
+    if (!l.cotacao_item_id) continue
+    const unidade = ehUnidadeQuantidade(l.quantidade_unidade) ? l.quantidade_unidade : null
+    let valor = l.valor_total
+    if (rascunho) {
+      const candidato = candidatoPorItem.get(l.cotacao_item_id)
+      const estimado = candidato ? valorEstimado(candidato, l.quantidade, unidade) : null
+      valor = estimado?.tipo === 'valor' ? estimado.valor : null
+    }
+    escolhas.set(l.insumo_id, { cotacao_item_id: l.cotacao_item_id, quantidade: l.quantidade, quantidade_unidade: unidade, valor })
+  }
+
+  const total = rascunho
+    ? [...escolhas.values()].reduce((soma, e) => soma + (e.valor ?? 0), 0)
+    : mapa.valor_total
+
+  return { mapa, rascunho, pesos, grupos, escolhas, total }
 }

@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import Link from 'next/link'
-import { Check, Save, Printer, Wand2 } from 'lucide-react'
+import { Check, Save, FileDown, Wand2 } from 'lucide-react'
 import type { CandidatoItem, GrupoInsumo } from '@/lib/comparacao'
 import type { salvarSelecoes, aprovarMapa } from '@/app/(dashboard)/mapas/actions'
 import { sugestaoDoGrupo, valorEstimado } from '@/lib/compras'
@@ -160,9 +160,14 @@ export function ComparacaoTable({
           {alterado && !congelado && <span className="ml-2 text-oxido">· alterações não salvas</span>}
         </p>
         <div className="flex flex-wrap items-center gap-2">
-          <a href={`/mapas/${mapaId}/imprimir`} target="_blank" rel="noopener noreferrer" className="btn btn-secundario btn-sm">
-            <Printer size={14} />
-            Imprimir
+          <a
+            href={`/mapas/${mapaId}/pdf`}
+            download
+            className="btn btn-secundario btn-sm"
+            title={congelado ? 'Mapa com a comparação da aprovação' : 'Mapa com as escolhas salvas no rascunho'}
+          >
+            <FileDown size={14} />
+            Baixar PDF
           </a>
           {!congelado && (
             <>

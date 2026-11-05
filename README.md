@@ -50,6 +50,7 @@ O acesso é só para usuários autenticados. **Deixe o cadastro público desliga
 3. **Vínculo**: cada item é ligado ao insumo mais parecido (nome ou sinônimo, via `pg_trgm`) pela função `vincular_itens_cotacao`. O que não passar do limiar fica para vínculo manual.
 4. **Mapa**: `lib/comparacao.ts` pontua os fornecedores **dentro de cada insumo**. O preço é comparado na unidade base (R$/g, R$/mL), então embalagens de tamanhos e unidades diferentes ficam comparáveis. O score é **só uma sugestão**: o comprador escolhe a oferta de cada insumo, informa a quantidade (mg, g, kg, mL, L ou kL) e aprova.
 5. **Histórico de compras**: a aprovação (função `aprovar_mapa`) congela a decisão — cópia da oferta escolhida, quantidade, valor, a comparação inteira, quem aprovou e quando. Mapa aprovado não muda nem pode ser excluído (travas no banco); só cancelado, com motivo. A tela `/compras` lista tudo que foi aprovado.
+6. **PDF**: mapas e cotações saem em PDF pelo botão "Baixar PDF" (`/mapas/[id]/pdf` e `/cotacoes/[id]/pdf`), gerados no servidor com `@react-pdf/renderer` (`components/pdf/`). O mapa aprovado sai da cópia congelada.
 
 ## Importação da tabela GYN
 
