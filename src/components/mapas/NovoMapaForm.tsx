@@ -9,7 +9,7 @@ interface Props {
   children: React.ReactNode
 }
 
-// Os campos (cotações, pesos) são renderizados no servidor e chegam como
+// Os campos (título, cotações) são renderizados no servidor e chegam como
 // children; aqui fica só o envio e a mensagem de erro de validação.
 export function NovoMapaForm({ action, children }: Props) {
   const [erro, formAction, pending] = useActionState(

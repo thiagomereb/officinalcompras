@@ -12,7 +12,7 @@ const SITUACAO = {
 } as const
 
 export function MapaPdf({ doc, geradoEm }: { doc: DocumentoMapa; geradoEm: string }) {
-  const { mapa, grupos, escolhas, pesos, total, rascunho } = doc
+  const { mapa, grupos, escolhas, total, rascunho } = doc
   const situacao = SITUACAO[mapa.status as keyof typeof SITUACAO] ?? SITUACAO.rascunho
   const comprados = grupos.filter((g) => escolhas.has(g.insumo_id)).length
 
@@ -61,8 +61,7 @@ export function MapaPdf({ doc, geradoEm }: { doc: DocumentoMapa; geradoEm: strin
             </Text>
           )}
           <Text style={[estilos.suave, { marginTop: 2, fontSize: 7.5 }]}>
-            Pesos da sugestão: preço {pesos.preco}% · entrega {pesos.entrega}% · pagamento {pesos.pagamento}% · frete{' '}
-            {pesos.frete}%. A sugestão é a oferta de melhor score; a escolha é do comprador.
+            A sugestão é a oferta de menor preço por unidade base; a escolha é do comprador.
           </Text>
         </View>
 
@@ -73,7 +72,7 @@ export function MapaPdf({ doc, geradoEm }: { doc: DocumentoMapa; geradoEm: strin
           const colunas: Coluna<CandidatoItem>[] = [
             {
               titulo: 'Fornecedor',
-              largura: 128,
+              largura: 156,
               valor: (c) => `${c.fornecedor_nome}${sugestao?.cotacao_item_id === c.cotacao_item_id ? ' (sugestão)' : ''}`,
             },
             { titulo: 'Preço', largura: 54, alinhar: 'right', valor: (c) => moeda(c.preco_unitario) },
@@ -86,9 +85,8 @@ export function MapaPdf({ doc, geradoEm }: { doc: DocumentoMapa; geradoEm: strin
             { titulo: 'Por unid. base', largura: 70, alinhar: 'right', valor: (c) => precoBase(c.preco_base, c.unidade_base) },
             { titulo: 'Entrega', largura: 36, alinhar: 'right', valor: (c) => (c.prazo_entrega_dias != null ? `${c.prazo_entrega_dias} d` : '—') },
             { titulo: 'Pgto', largura: 32, alinhar: 'right', valor: (c) => (c.prazo_pagamento_dias != null ? `${c.prazo_pagamento_dias} d` : '—') },
-            { titulo: 'Frete', largura: 44, alinhar: 'right', valor: (c) => (c.frete_fixo ? moeda(c.frete_fixo) : 'grátis') },
+            { titulo: 'Frete', largura: 44, alinhar: 'right', valor: (c) => (c.frete_fixo == null ? '—' : c.frete_fixo > 0 ? moeda(c.frete_fixo) : 'grátis') },
             { titulo: 'Val. lote', largura: 52, alinhar: 'center', valor: (c) => dataCurta(c.validade) },
-            { titulo: 'Score', largura: 28, alinhar: 'right', valor: (c) => (c.score * 100).toFixed(0) },
             {
               titulo: '',
               largura: 23,

@@ -21,7 +21,7 @@ export function CotacaoPdf({
     ['Validade', dataCurta(cotacao.validade_cotacao)],
     ['Prazo de entrega', cotacao.prazo_entrega_dias != null ? `${cotacao.prazo_entrega_dias} dias` : '—'],
     ['Prazo de pagamento', cotacao.prazo_pagamento_dias != null ? `${cotacao.prazo_pagamento_dias} dias` : '—'],
-    ['Frete fixo', cotacao.frete_fixo ? moeda(cotacao.frete_fixo) : 'grátis'],
+    ['Frete fixo', cotacao.frete_fixo == null ? '—' : cotacao.frete_fixo > 0 ? moeda(cotacao.frete_fixo) : 'grátis'],
     ['Frete grátis acima de', cotacao.frete_gratis_acima ? moeda(cotacao.frete_gratis_acima) : '—'],
     ['Pedido mínimo', cotacao.pedido_minimo ? moeda(cotacao.pedido_minimo) : '—'],
   ]

@@ -202,8 +202,8 @@ export function ComparacaoTable({
 
       {!congelado && (
         <p className="text-[12.5px] text-ardosia">
-          A <span className="font-medium text-grafite">sugestão</span> é a oferta de melhor score pelos pesos do mapa. A
-          escolha é sua: clique na oferta que vai comprar.
+          A <span className="font-medium text-grafite">sugestão</span> é a oferta de menor preço por unidade base. Prazos e
+          frete ficam ao lado para você pesar. A escolha é sua: clique na oferta que vai comprar.
         </p>
       )}
 
@@ -262,7 +262,6 @@ export function ComparacaoTable({
                     <th className="num">Pgto</th>
                     <th className="num">Frete</th>
                     <th>Validade lote</th>
-                    <th className="num">Score</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -300,7 +299,7 @@ export function ComparacaoTable({
                           {!c.preco_comparavel && (
                             <div
                               className="text-[11px] text-oxido"
-                              title="Unidade de outra grandeza que a dos demais fornecedores: o preço não entrou no score"
+                              title="Unidade de outra grandeza que a dos demais fornecedores: o preço não dá para comparar"
                             >
                               unidade diferente
                             </div>
@@ -308,11 +307,12 @@ export function ComparacaoTable({
                         </td>
                         <td className="num text-ardosia">{c.prazo_entrega_dias != null ? `${c.prazo_entrega_dias} d` : '—'}</td>
                         <td className="num text-ardosia">{c.prazo_pagamento_dias != null ? `${c.prazo_pagamento_dias} d` : '—'}</td>
-                        <td className="num text-ardosia">{c.frete_fixo ? moeda(c.frete_fixo) : 'grátis'}</td>
+                        <td className="num text-ardosia">
+                          {c.frete_fixo == null ? '—' : c.frete_fixo > 0 ? moeda(c.frete_fixo) : 'grátis'}
+                        </td>
                         <td className="text-ardosia">
                           {c.validade ? new Date(c.validade + 'T12:00:00').toLocaleDateString('pt-BR') : '—'}
                         </td>
-                        <td className="num leitura text-ardosia">{(c.score * 100).toFixed(0)}</td>
                       </tr>
                     )
                   })}

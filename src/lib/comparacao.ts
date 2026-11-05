@@ -1,14 +1,5 @@
 import { precoPorUnidadeBase } from './unidades'
 
-export type Pesos = {
-  preco: number
-  entrega: number
-  pagamento: number
-  frete: number
-}
-
-export const PESOS_PADRAO: Pesos = { preco: 50, entrega: 20, pagamento: 20, frete: 10 }
-
 export type CandidatoItem = {
   cotacao_item_id: string
   cotacao_id: string
@@ -25,36 +16,21 @@ export type CandidatoItem = {
   frete_fixo: number | null
   frete_gratis_acima: number | null
   pedido_minimo: number | null
-  // Preço convertido para a unidade base (R$/g, R$/mL, R$/un) — é o que entra no score
+  // Preço convertido para a unidade base (R$/g, R$/mL, R$/un)
   preco_base: number
   unidade_base: string | null
   // false quando a unidade do item é de outra grandeza que a da maioria do
-  // grupo (ex: "un" num grupo em gramas); o preço dele não entra na disputa
+  // grupo (ex: "un" num grupo em gramas): o preço não dá para comparar
   preco_comparavel: boolean
-  score: number
 }
 
-export type CandidatoSemScore = Omit<CandidatoItem, 'score' | 'preco_base' | 'unidade_base' | 'preco_comparavel'>
+// A oferta como vem das cotações, antes de converter o preço
+export type OfertaCotacao = Omit<CandidatoItem, 'preco_base' | 'unidade_base' | 'preco_comparavel'>
 
 export type GrupoInsumo = {
   insumo_id: string
   insumo_nome: string
   candidatos: CandidatoItem[]
-}
-
-// Critério sem informação ou sem variação dentro do grupo não deve decidir a
-// disputa, então vale o meio da escala para todos.
-const NEUTRO = 0.5
-
-// 1 = melhor valor do grupo, 0 = pior. Valores nulos ficam neutros e não
-// participam do min/max — senão um prazo vazio distorce a escala dos demais.
-function escala(valor: number | null, conhecidos: number[], menorEMelhor: boolean): number {
-  if (valor == null || conhecidos.length === 0) return NEUTRO
-  const min = Math.min(...conhecidos)
-  const max = Math.max(...conhecidos)
-  if (max === min) return NEUTRO
-  const pos = (valor - min) / (max - min)
-  return menorEMelhor ? 1 - pos : pos
 }
 
 function baseMaisComum(bases: (string | null)[]): string | null {
@@ -71,65 +47,36 @@ function baseMaisComum(bases: (string | null)[]): string | null {
   return melhor
 }
 
-function pontuarGrupo(candidatos: CandidatoSemScore[], pesos: Pesos): CandidatoItem[] {
-  const precos = candidatos.map((c) => precoPorUnidadeBase(c.preco_unitario, c.quantidade_minima, c.unidade))
-  const base = baseMaisComum(precos.map((p) => p.base))
-  const comparavel = precos.map((p) => p.base === base)
-
-  const precosComparaveis = precos.filter((_, i) => comparavel[i]).map((p) => p.valor)
-  const entregas = candidatos.flatMap((c) => (c.prazo_entrega_dias != null ? [c.prazo_entrega_dias] : []))
-  const pagamentos = candidatos.flatMap((c) => (c.prazo_pagamento_dias != null ? [c.prazo_pagamento_dias] : []))
-  // Frete vazio é exibido como "Grátis" em toda a interface, então conta como 0
-  const fretes = candidatos.map((c) => c.frete_fixo ?? 0)
-
-  const totalPeso = pesos.preco + pesos.entrega + pesos.pagamento + pesos.frete
-
-  return candidatos.map((c, i) => {
-    const scorePreco = comparavel[i] ? escala(precos[i].valor, precosComparaveis, true) : NEUTRO
-    const scoreEntrega = escala(c.prazo_entrega_dias, entregas, true)
-    const scorePagamento = escala(c.prazo_pagamento_dias, pagamentos, false)
-    const scoreFrete = escala(c.frete_fixo ?? 0, fretes, true)
-
-    const score =
-      (scorePreco * pesos.preco +
-        scoreEntrega * pesos.entrega +
-        scorePagamento * pesos.pagamento +
-        scoreFrete * pesos.frete) /
-      totalPeso
-
-    return {
-      ...c,
-      preco_base: precos[i].valor,
-      unidade_base: precos[i].base,
-      preco_comparavel: comparavel[i],
-      score,
-    }
-  })
-}
-
-// O score é sempre relativo aos concorrentes do MESMO insumo: normalizar o
-// preço de um insumo de R$5/g contra outro de R$500/g achataria a diferença
-// entre fornecedores e deixaria prazo/pagamento decidirem sozinhos.
-export function calcularScores(candidatos: CandidatoSemScore[], pesos: Pesos): CandidatoItem[] {
-  const totalPeso = pesos.preco + pesos.entrega + pesos.pagamento + pesos.frete
-  const pesosValidos = Number.isFinite(totalPeso) && totalPeso > 0 ? pesos : PESOS_PADRAO
-
-  const porInsumo = new Map<string, CandidatoSemScore[]>()
-  for (const c of candidatos) {
-    const grupo = porInsumo.get(c.insumo_id) ?? []
-    grupo.push(c)
-    porInsumo.set(c.insumo_id, grupo)
+// Converte o preço de cada oferta para a unidade base e marca, dentro de cada
+// insumo, quais podem ser comparadas entre si (mesma grandeza da maioria)
+export function compararOfertas(ofertas: OfertaCotacao[]): CandidatoItem[] {
+  const porInsumo = new Map<string, OfertaCotacao[]>()
+  for (const o of ofertas) {
+    const grupo = porInsumo.get(o.insumo_id) ?? []
+    grupo.push(o)
+    porInsumo.set(o.insumo_id, grupo)
   }
 
-  const pontuados = new Map<string, CandidatoItem>()
+  const convertidas = new Map<string, CandidatoItem>()
   for (const grupo of porInsumo.values()) {
-    for (const c of pontuarGrupo(grupo, pesosValidos)) pontuados.set(c.cotacao_item_id, c)
+    const precos = grupo.map((o) => precoPorUnidadeBase(o.preco_unitario, o.quantidade_minima, o.unidade))
+    const base = baseMaisComum(precos.map((p) => p.base))
+    grupo.forEach((o, i) => {
+      convertidas.set(o.cotacao_item_id, {
+        ...o,
+        preco_base: precos[i].valor,
+        unidade_base: precos[i].base,
+        preco_comparavel: precos[i].base === base,
+      })
+    })
   }
 
   // Mantém a ordem de entrada
-  return candidatos.map((c) => pontuados.get(c.cotacao_item_id)!)
+  return ofertas.map((o) => convertidas.get(o.cotacao_item_id)!)
 }
 
+// Dentro de cada insumo, do menor preço por unidade base para o maior; o que
+// não dá para comparar vai para o fim
 export function agruparPorInsumo(itens: CandidatoItem[]): GrupoInsumo[] {
   const mapa = new Map<string, GrupoInsumo>()
 
@@ -140,19 +87,13 @@ export function agruparPorInsumo(itens: CandidatoItem[]): GrupoInsumo[] {
     mapa.get(item.insumo_id)!.candidatos.push(item)
   }
 
-  // Ordena candidatos por score desc dentro de cada grupo
   for (const grupo of mapa.values()) {
-    grupo.candidatos.sort((a, b) => b.score - a.score)
+    grupo.candidatos.sort(
+      (a, b) => Number(b.preco_comparavel) - Number(a.preco_comparavel) || a.preco_base - b.preco_base,
+    )
   }
 
   return Array.from(mapa.values()).sort((a, b) =>
     a.insumo_nome.localeCompare(b.insumo_nome, 'pt-BR')
   )
-}
-
-export function validarPesos(pesos: Pesos): string | null {
-  const valores = [pesos.preco, pesos.entrega, pesos.pagamento, pesos.frete]
-  if (valores.some((v) => !Number.isFinite(v) || v < 0)) return 'Os pesos devem ser números positivos.'
-  if (valores.reduce((a, b) => a + b, 0) !== 100) return 'A soma dos pesos deve ser 100%.'
-  return null
 }

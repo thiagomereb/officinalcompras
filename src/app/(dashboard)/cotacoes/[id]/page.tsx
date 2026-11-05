@@ -234,7 +234,7 @@ export default async function CotacaoPage({ params, searchParams }: { params: Pr
   const condicoes = [
     `Entrega ${cotacao.prazo_entrega_dias != null ? `${cotacao.prazo_entrega_dias} d` : '—'}`,
     `Pagamento ${cotacao.prazo_pagamento_dias != null ? `${cotacao.prazo_pagamento_dias} d` : '—'}`,
-    `Frete ${cotacao.frete_fixo ? moeda(cotacao.frete_fixo) : 'grátis'}`,
+    `Frete ${cotacao.frete_fixo == null ? '—' : cotacao.frete_fixo > 0 ? moeda(cotacao.frete_fixo) : 'grátis'}`,
   ].join(' · ')
 
   return (
@@ -281,7 +281,7 @@ export default async function CotacaoPage({ params, searchParams }: { params: Pr
         </p>
       )}
 
-      {/* Condições comerciais entram no score do mapa (entrega, pagamento, frete) */}
+      {/* Condições comerciais aparecem ao lado de cada oferta no mapa (entrega, pagamento, frete) */}
       <details
         className="painel group mb-6"
         open={cotacao.prazo_entrega_dias == null && cotacao.prazo_pagamento_dias == null}

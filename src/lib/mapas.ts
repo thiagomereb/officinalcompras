@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database, Tables } from '@/types/database'
-import { calcularScores, agruparPorInsumo, PESOS_PADRAO, type CandidatoSemScore, type GrupoInsumo, type Pesos } from './comparacao'
+import { compararOfertas, agruparPorInsumo, type OfertaCotacao, type GrupoInsumo } from './comparacao'
 import { ehComparacaoCongelada, valorEstimado } from './compras'
 import { ehUnidadeQuantidade, type UnidadeQuantidade } from './unidades'
 import { buscarTodos, emLotes } from './supabase/consultas'
@@ -8,13 +8,12 @@ import { buscarTodos, emLotes } from './supabase/consultas'
 type Fornecedor = { razao_social: string; nome_fantasia: string | null } | null
 
 // Monta os grupos de comparação de um mapa: cada item vinculado das cotações
-// do mapa vira um candidato, pontuado contra os outros do mesmo insumo.
-// Usado pela tela do mapa e pela versão de impressão, que precisam mostrar
-// exatamente o mesmo ranking.
+// do mapa vira uma oferta, comparada pelo preço na unidade base com as outras
+// do mesmo insumo. Usado pela tela do mapa, pela aprovação e pelo PDF, que
+// precisam mostrar exatamente a mesma ordem.
 export async function carregarGruposMapa(
   supabase: SupabaseClient<Database>,
   cotacoesIds: string[],
-  pesos: Pesos,
 ): Promise<GrupoInsumo[]> {
   if (cotacoesIds.length === 0) return []
 
@@ -42,7 +41,7 @@ export async function carregarGruposMapa(
     }),
   )
 
-  const candidatos: CandidatoSemScore[] = itens
+  const ofertas: OfertaCotacao[] = itens
     .filter((item) => item.insumo_id)
     .map((item) => {
       const cond = condicoesPorCotacao.get(item.cotacao_id)
@@ -66,7 +65,7 @@ export async function carregarGruposMapa(
       }
     })
 
-  return agruparPorInsumo(calcularScores(candidatos, pesos))
+  return agruparPorInsumo(compararOfertas(ofertas))
 }
 
 export type UltimaCompra = {
@@ -117,7 +116,6 @@ export type EscolhaDocumento = {
 export type DocumentoMapa = {
   mapa: Tables<'mapas_cotacao'>
   rascunho: boolean
-  pesos: Pesos
   grupos: GrupoInsumo[]
   escolhas: Map<string, EscolhaDocumento>
   // Rascunho: soma estimada na hora; aprovado: o valor gravado na aprovação
@@ -135,10 +133,9 @@ export async function carregarDocumentoMapa(
 
   const rascunho = mapa.status === 'rascunho'
   const congelada = ehComparacaoCongelada(mapa.comparacao) ? mapa.comparacao : null
-  const pesos: Pesos = congelada?.pesos ?? (mapa.pesos as Pesos | null) ?? PESOS_PADRAO
 
   const [grupos, { data: linhas }] = await Promise.all([
-    congelada && !rascunho ? Promise.resolve(congelada.grupos) : carregarGruposMapa(supabase, mapa.cotacoes_ids, pesos),
+    congelada && !rascunho ? Promise.resolve(congelada.grupos) : carregarGruposMapa(supabase, mapa.cotacoes_ids),
     supabase
       .from('mapa_cotacao_itens')
       .select('insumo_id, cotacao_item_id, quantidade, quantidade_unidade, valor_total')
@@ -163,5 +160,5 @@ export async function carregarDocumentoMapa(
     ? [...escolhas.values()].reduce((soma, e) => soma + (e.valor ?? 0), 0)
     : mapa.valor_total
 
-  return { mapa, rascunho, pesos, grupos, escolhas, total }
+  return { mapa, rascunho, grupos, escolhas, total }
 }

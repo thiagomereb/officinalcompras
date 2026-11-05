@@ -1,6 +1,6 @@
 ﻿import { createClient } from '@/lib/supabase/server'
 import { buscarTodos } from '@/lib/supabase/consultas'
-import { calcularScores, agruparPorInsumo, PESOS_PADRAO, type CandidatoItem, type CandidatoSemScore } from '@/lib/comparacao'
+import { compararOfertas, agruparPorInsumo, type CandidatoItem, type OfertaCotacao } from '@/lib/comparacao'
 import { Indicadores } from '@/components/dashboard/Indicadores'
 import { Cabecalho } from '@/components/ui/Cabecalho'
 import { ComparativoTable, type ComparativoRow } from '@/components/dashboard/ComparativoTable'
@@ -30,13 +30,13 @@ function dataISO(d: Date) {
   return new Intl.DateTimeFormat('en-CA', { timeZone: FUSO }).format(d)
 }
 
-// Dois candidatos mais baratos de fornecedores diferentes, comparando só preços
-// na mesma unidade base (R$/g não se compara com R$/un)
+// Dois candidatos mais baratos de fornecedores diferentes. O grupo já vem do
+// menor para o maior preço por unidade base, com o que não dá para comparar
+// (R$/un num grupo em R$/g) no fim.
 function doisMaisBaratos(candidatos: CandidatoItem[]): [CandidatoItem, CandidatoItem | null] {
-  const comparaveis = candidatos.filter((c) => c.preco_comparavel)
-  const ordenados = [...(comparaveis.length ? comparaveis : candidatos)].sort((a, b) => a.preco_base - b.preco_base)
-  const melhor = ordenados[0]
-  const segundo = ordenados.find((c) => c.fornecedor_nome !== melhor.fornecedor_nome) ?? null
+  const melhor = candidatos[0]
+  const segundo =
+    candidatos.find((c) => c.preco_comparavel && c.fornecedor_nome !== melhor.fornecedor_nome) ?? null
   return [melhor, segundo]
 }
 
@@ -94,7 +94,7 @@ export default async function DashboardPage() {
   )
   const dataDoItem = (id: string) => (itemPorId.get(id)?.cotacoes as CotacaoDoItem | null)?.data_cotacao ?? ''
 
-  const candidatosSemScore: CandidatoSemScore[] = rawItems.map((item) => {
+  const ofertas: OfertaCotacao[] = rawItems.map((item) => {
     const cot = item.cotacoes as CotacaoDoItem | null
     const insumo = item.insumos as { nome_padrao: string; cas_number: string | null } | null
     const forn = cot?.fornecedores
@@ -120,18 +120,18 @@ export default async function DashboardPage() {
   // A comparação usa só ofertas vigentes: cotação vencida não é preço que dá
   // para comprar hoje. E de cada fornecedor vale a cotação mais recente do
   // insumo, senão o histórico dele concorreria consigo mesmo.
-  const vigentes = candidatosSemScore.filter((c) => {
+  const vigentes = ofertas.filter((c) => {
     const validade = (itemPorId.get(c.cotacao_item_id)?.cotacoes as CotacaoDoItem | null)?.validade_cotacao
     return !validade || validade >= today
   })
-  const maisRecente = new Map<string, CandidatoSemScore>()
+  const maisRecente = new Map<string, OfertaCotacao>()
   for (const c of vigentes) {
     const chave = `${c.insumo_id}|${c.fornecedor_nome}`
     const atual = maisRecente.get(chave)
     if (!atual || dataDoItem(c.cotacao_item_id) > dataDoItem(atual.cotacao_item_id)) maisRecente.set(chave, c)
   }
 
-  const grupos = agruparPorInsumo(calcularScores([...maisRecente.values()], PESOS_PADRAO))
+  const grupos = agruparPorInsumo(compararOfertas([...maisRecente.values()]))
 
   // Comparativo rows — preço sempre na unidade base, para embalagens diferentes
   // serem comparáveis
@@ -148,7 +148,6 @@ export default async function DashboardPage() {
       diferenca_pct: segundo ? (segundo.preco_base / melhor.preco_base - 1) * 100 : null,
       prazo_entrega: melhor.prazo_entrega_dias,
       validade: melhor.validade,
-      score: melhor.score,
       unidade: melhor.unidade_base,
     }
   })
@@ -164,7 +163,7 @@ export default async function DashboardPage() {
       comConcorrencia.length
     : null
 
-  // Supplier ranking (by number of wins = best score on insumo)
+  // Ranking: em quantos insumos cada fornecedor tem o menor preço
   const winCount = new Map<string, number>()
   grupos.forEach((g) => {
     const best = g.candidatos[0]
@@ -211,10 +210,9 @@ export default async function DashboardPage() {
     )
     priceHistoryInsumo = topGrupo.insumo_nome
 
-    const historico = calcularScores(
-      candidatosSemScore.filter((c) => c.insumo_id === topGrupo.insumo_id),
-      PESOS_PADRAO,
-    ).filter((c) => c.preco_comparavel)
+    const historico = compararOfertas(ofertas.filter((c) => c.insumo_id === topGrupo.insumo_id)).filter(
+      (c) => c.preco_comparavel,
+    )
     priceHistoryUnidade = historico[0]?.unidade_base ?? null
 
     const byDate = new Map<string, Record<string, number>>()

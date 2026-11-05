@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { calcularScores, agruparPorInsumo, PESOS_PADRAO, type CandidatoSemScore } from './comparacao'
+import { compararOfertas, agruparPorInsumo, type OfertaCotacao } from './comparacao'
 import { montarAprovacao, sugestaoDoGrupo, valorEstimado, type Escolha } from './compras'
 
-function oferta(over: Partial<CandidatoSemScore> & Pick<CandidatoSemScore, 'cotacao_item_id'>): CandidatoSemScore {
+function oferta(over: Partial<OfertaCotacao> & Pick<OfertaCotacao, 'cotacao_item_id'>): OfertaCotacao {
   return {
     cotacao_id: `cot-${over.cotacao_item_id}`,
     insumo_id: 'acido',
@@ -24,13 +24,10 @@ function oferta(over: Partial<CandidatoSemScore> & Pick<CandidatoSemScore, 'cota
 
 // Galena: 1 kg a R$85 (R$0,085/g). Fagron: 100 g a R$11,20 (R$0,112/g).
 const grupos = agruparPorInsumo(
-  calcularScores(
-    [
-      oferta({ cotacao_item_id: 'galena', preco_unitario: 85, quantidade_minima: 1, unidade: 'kg' }),
-      oferta({ cotacao_item_id: 'fagron', preco_unitario: 11.2, quantidade_minima: 100, unidade: 'g' }),
-    ],
-    PESOS_PADRAO,
-  ),
+  compararOfertas([
+    oferta({ cotacao_item_id: 'fagron', preco_unitario: 11.2, quantidade_minima: 100, unidade: 'g' }),
+    oferta({ cotacao_item_id: 'galena', preco_unitario: 85, quantidade_minima: 1, unidade: 'kg' }),
+  ]),
 )
 
 const escolha = (over: Partial<Escolha>): Escolha => ({
@@ -55,15 +52,25 @@ describe('valorEstimado', () => {
 })
 
 describe('sugestaoDoGrupo', () => {
-  it('sugere o melhor score só quando há com quem comparar', () => {
+  it('sugere o menor preço por unidade base', () => {
     expect(sugestaoDoGrupo(grupos[0])?.cotacao_item_id).toBe('galena')
+  })
+
+  it('não sugere sem ao menos duas ofertas comparáveis', () => {
     expect(sugestaoDoGrupo({ ...grupos[0], candidatos: [grupos[0].candidatos[1]] })).toBeNull()
+    const [comUnidade] = agruparPorInsumo(
+      compararOfertas([
+        oferta({ cotacao_item_id: 'a', unidade: 'g' }),
+        oferta({ cotacao_item_id: 'b', unidade: 'un' }),
+      ]),
+    )
+    expect(sugestaoDoGrupo(comUnidade)).toBeNull()
   })
 })
 
 describe('montarAprovacao', () => {
   it('congela a oferta escolhida, o valor e se seguiu a sugestão', () => {
-    const r = montarAprovacao(grupos, [escolha({ cotacao_item_id: 'fagron' })], PESOS_PADRAO)
+    const r = montarAprovacao(grupos, [escolha({ cotacao_item_id: 'fagron' })])
     expect(r.ok).toBe(true)
     if (!r.ok) return
     expect(r.itens[0]).toMatchObject({
@@ -74,6 +81,7 @@ describe('montarAprovacao', () => {
       valor_total: 336,
     })
     expect(r.valorTotal).toBe(336)
+    expect(r.comparacao).toMatchObject({ versao: 2 })
     expect(r.comparacao.grupos).toHaveLength(1)
   })
 
@@ -81,7 +89,6 @@ describe('montarAprovacao', () => {
     const r = montarAprovacao(
       [...grupos, { ...grupos[0], insumo_id: 'cafeina', insumo_nome: 'Cafeína' }],
       [escolha({ quantidade: null }), escolha({ insumo_id: 'cafeina', quantidade_unidade: 'mL' })],
-      PESOS_PADRAO,
     )
     expect(r.ok).toBe(false)
     if (r.ok) return
@@ -91,6 +98,6 @@ describe('montarAprovacao', () => {
   })
 
   it('exige ao menos uma escolha', () => {
-    expect(montarAprovacao(grupos, [], PESOS_PADRAO).ok).toBe(false)
+    expect(montarAprovacao(grupos, []).ok).toBe(false)
   })
 })

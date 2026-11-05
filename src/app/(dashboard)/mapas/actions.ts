@@ -3,7 +3,6 @@
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
-import { validarPesos, PESOS_PADRAO, type Pesos } from '@/lib/comparacao'
 import { carregarGruposMapa } from '@/lib/mapas'
 import { montarAprovacao, type Escolha } from '@/lib/compras'
 import { ehUnidadeQuantidade } from '@/lib/unidades'
@@ -48,24 +47,17 @@ export async function criarMapa(formData: FormData): Promise<Falha | void> {
 
   const titulo = String(formData.get('titulo') ?? '').trim()
   const cotacoesIds = formData.getAll('cotacoes_ids').map(String).filter(Boolean)
-  const pesos: Pesos = {
-    preco: Number(formData.get('peso_preco')),
-    entrega: Number(formData.get('peso_entrega')),
-    pagamento: Number(formData.get('peso_pagamento')),
-    frete: Number(formData.get('peso_frete')),
-  }
 
   if (!titulo) return { erro: 'Informe o título do mapa.' }
   if (cotacoesIds.length === 0) return { erro: 'Selecione pelo menos uma cotação.' }
-  const erroPesos = validarPesos(pesos)
-  if (erroPesos) return { erro: erroPesos }
 
   const { data, error } = await supabase
     .from('mapas_cotacao')
     .insert({
       titulo,
       cotacoes_ids: cotacoesIds,
-      pesos,
+      // A coluna é da época dos pesos por critério; mapa novo não usa
+      pesos: null,
       status: 'rascunho',
     })
     .select('id')
@@ -126,7 +118,7 @@ export async function aprovarMapa(mapaId: string, escolhas: unknown): Promise<Fa
 
   const { data: mapa, error } = await supabase
     .from('mapas_cotacao')
-    .select('status, cotacoes_ids, pesos')
+    .select('status, cotacoes_ids')
     .eq('id', mapaId)
     .single()
   if (error || !mapa) return { erro: 'Mapa não encontrado.' }
@@ -135,9 +127,8 @@ export async function aprovarMapa(mapaId: string, escolhas: unknown): Promise<Fa
   const validas = escolhasValidas(escolhas)
   if ('erro' in validas) return validas
 
-  const pesos = (mapa.pesos as Pesos | null) ?? PESOS_PADRAO
-  const grupos = await carregarGruposMapa(supabase, mapa.cotacoes_ids, pesos)
-  const aprovacao = montarAprovacao(grupos, validas, pesos)
+  const grupos = await carregarGruposMapa(supabase, mapa.cotacoes_ids)
+  const aprovacao = montarAprovacao(grupos, validas)
   if (!aprovacao.ok) return { erro: aprovacao.erros.join(' ') }
 
   const { error: erroAprovacao } = await supabase.rpc('aprovar_mapa', {

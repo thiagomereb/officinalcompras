@@ -1,11 +1,9 @@
 ﻿import Link from 'next/link'
 import { FileText } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
-import { PesosEditor } from '@/components/mapas/PesosEditor'
 import { NovoMapaForm } from '@/components/mapas/NovoMapaForm'
 import { Cabecalho } from '@/components/ui/Cabecalho'
 import { Vazio } from '@/components/ui/Vazio'
-import { PESOS_PADRAO } from '@/lib/comparacao'
 import { criarMapa } from '../actions'
 
 export default async function NovoMapaPage() {
@@ -23,7 +21,7 @@ export default async function NovoMapaPage() {
       <Cabecalho
         voltar={{ href: '/mapas', label: 'Mapas de cotação' }}
         titulo="Novo mapa de cotação"
-        descricao="Escolha as cotações que vão disputar e quanto pesa cada critério."
+        descricao="Escolha as cotações que vão entrar na comparação."
       />
 
       {!cotacoes?.length ? (
@@ -87,15 +85,6 @@ export default async function NovoMapaPage() {
                 )
               })}
             </ul>
-          </section>
-
-          <section className="painel p-5 lg:p-6">
-            <h2 className="painel-titulo">Pesos dos critérios</h2>
-            <p className="mb-5 text-[12.5px] text-ardosia">
-              Somam 100%. Dentro de cada insumo, quem tem o melhor valor num critério leva o peso inteiro dele, e o pior
-              leva zero.
-            </p>
-            <PesosEditor inicial={PESOS_PADRAO} />
           </section>
         </NovoMapaForm>
       )}

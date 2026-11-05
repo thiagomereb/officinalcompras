@@ -1,6 +1,6 @@
 # Officinal Compras
 
-Sistema interno de cotação de insumos para a farmácia de manipulação. Recebe as tabelas de preço dos fornecedores (planilha, PDF ou foto), extrai os itens, vincula cada um à tabela mestre de insumos e gera mapas de comparação com um score ponderado por preço, prazo de entrega, prazo de pagamento e frete.
+Sistema interno de cotação de insumos para a farmácia de manipulação. Recebe as tabelas de preço dos fornecedores (planilha, PDF ou foto), extrai os itens, vincula cada um à tabela mestre de insumos e gera mapas de comparação de preço por insumo, com prazos e frete de cada fornecedor ao lado.
 
 ## Stack
 
@@ -48,7 +48,7 @@ O acesso é só para usuários autenticados. **Deixe o cadastro público desliga
    - PDFs são convertidos em imagens no navegador, uma por página.
    - Extrair de novo o mesmo arquivo substitui os itens em vez de duplicá-los.
 3. **Vínculo**: cada item é ligado ao insumo mais parecido (nome ou sinônimo, via `pg_trgm`) pela função `vincular_itens_cotacao`, a partir de 60% de semelhança. O que não passar fica para vínculo manual. Vínculos errados são corrigidos na própria tabela da cotação, e cada correção (ou vínculo manual) pode virar sinônimo do insumo, para a próxima cotação já entrar certa.
-4. **Mapa**: `lib/comparacao.ts` pontua os fornecedores **dentro de cada insumo**. O preço é comparado na unidade base (R$/g, R$/mL), então embalagens de tamanhos e unidades diferentes ficam comparáveis. O score é **só uma sugestão**: o comprador escolhe a oferta de cada insumo, informa a quantidade (mg, g, kg, mL, L ou kL) e aprova.
+4. **Mapa**: `lib/comparacao.ts` compara os fornecedores **dentro de cada insumo** pelo preço na unidade base (R$/g, R$/mL), então embalagens de tamanhos e unidades diferentes ficam comparáveis. A oferta mais barata aparece como **sugestão, e só isso**: prazos e frete ficam ao lado, e o comprador escolhe a oferta de cada insumo, informa a quantidade (mg, g, kg, mL, L ou kL) e aprova.
 5. **Histórico de compras**: a aprovação (função `aprovar_mapa`) congela a decisão — cópia da oferta escolhida, quantidade, valor, a comparação inteira, quem aprovou e quando. Mapa aprovado não muda nem pode ser excluído (travas no banco); só cancelado, com motivo. A tela `/compras` lista tudo que foi aprovado.
 6. **PDF**: mapas e cotações saem em PDF pelo botão "Baixar PDF" (`/mapas/[id]/pdf` e `/cotacoes/[id]/pdf`), gerados no servidor com `@react-pdf/renderer` (`components/pdf/`). O mapa aprovado sai da cópia congelada.
 

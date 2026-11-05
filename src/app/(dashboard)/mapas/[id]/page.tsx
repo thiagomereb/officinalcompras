@@ -1,7 +1,7 @@
 ﻿import { notFound } from 'next/navigation'
 import { GitCompare, Ban } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
-import { PESOS_PADRAO, type GrupoInsumo, type Pesos } from '@/lib/comparacao'
+import type { GrupoInsumo } from '@/lib/comparacao'
 import { carregarGruposMapa, carregarUltimasCompras, type UltimaCompra } from '@/lib/mapas'
 import { ehComparacaoCongelada } from '@/lib/compras'
 import { emLotes } from '@/lib/supabase/consultas'
@@ -29,7 +29,7 @@ type InfoDuplicata = { outroId: string; outroNome: string; eMaisBarato: boolean;
 // outro (ex: "Cafeína" e "Cafeína anidra" cadastrados como insumos distintos)
 function detectarDuplicatas(grupos: GrupoInsumo[], sinonimos: { insumo_id: string; sinonimo: string }[]) {
   const duplicatas: Record<string, InfoDuplicata> = {}
-  // Compara pelo preço na unidade base, o mesmo usado no score
+  // Compara pelo preço na unidade base, o mesmo da sugestão
   const melhorPreco = (g: GrupoInsumo) => (g.candidatos.length ? Math.min(...g.candidatos.map((c) => c.preco_base)) : Infinity)
   const grupoPorNome = new Map(grupos.map((g) => [g.insumo_nome.trim().toLowerCase(), g]))
   const grupoPorId = new Map(grupos.map((g) => [g.insumo_id, g]))
@@ -60,13 +60,12 @@ export default async function MapaPage({ params }: { params: Promise<{ id: strin
 
   const rascunho = mapa.status === 'rascunho'
   const congelada = ehComparacaoCongelada(mapa.comparacao) ? mapa.comparacao : null
-  const pesos: Pesos = congelada?.pesos ?? (mapa.pesos as Pesos | null) ?? PESOS_PADRAO
   const status = STATUS[mapa.status as keyof typeof STATUS] ?? STATUS.rascunho
 
   // Aprovado: desenha a comparação como estava na aprovação. Rascunho (ou
   // aprovado antes do registro congelado existir): calcula com os dados atuais.
   const [grupos, { data: escolhasRows }] = await Promise.all([
-    congelada && !rascunho ? Promise.resolve(congelada.grupos) : carregarGruposMapa(supabase, mapa.cotacoes_ids, pesos),
+    congelada && !rascunho ? Promise.resolve(congelada.grupos) : carregarGruposMapa(supabase, mapa.cotacoes_ids),
     supabase
       .from('mapa_cotacao_itens')
       .select('insumo_id, cotacao_item_id, quantidade, quantidade_unidade')
@@ -89,13 +88,6 @@ export default async function MapaPage({ params }: { params: Promise<{ id: strin
       quantidade_unidade: e.quantidade_unidade,
     }
   }
-
-  const criterios: [string, number][] = [
-    ['Preço', pesos.preco],
-    ['Entrega', pesos.entrega],
-    ['Pagamento', pesos.pagamento],
-    ['Frete', pesos.frete],
-  ]
 
   return (
     <div className="pagina">
@@ -121,7 +113,7 @@ export default async function MapaPage({ params }: { params: Promise<{ id: strin
       />
 
       {mapa.aprovado_em && (
-        <p className="mb-2 text-[13px] text-ardosia">
+        <p className="mb-4 text-[13px] text-ardosia">
           Aprovado em <span className="text-grafite">{dataHora(mapa.aprovado_em)}</span>
           {mapa.aprovado_por && (
             <>
@@ -154,15 +146,6 @@ export default async function MapaPage({ params }: { params: Promise<{ id: strin
           das cotações; fornecedor, preço e embalagem escolhidos estão registrados no histórico de compras.
         </p>
       )}
-
-      <p className="mb-5 flex flex-wrap items-center gap-x-4 gap-y-1 text-[12.5px] text-ardosia">
-        <span className="rotulo">Pesos da sugestão</span>
-        {criterios.map(([label, valor]) => (
-          <span key={label}>
-            {label} <span className="leitura text-grafite">{valor}%</span>
-          </span>
-        ))}
-      </p>
 
       {grupos.length === 0 ? (
         <Vazio

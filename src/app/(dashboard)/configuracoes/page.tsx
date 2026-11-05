@@ -1,10 +1,6 @@
 import { Cabecalho } from '@/components/ui/Cabecalho'
 
 const PLANEJADO = [
-  {
-    titulo: 'Pesos padrão dos mapas',
-    desc: 'Hoje os pesos são escolhidos em cada mapa novo, a partir de 50 / 20 / 20 / 10.',
-  },
   { titulo: 'Avisos de vencimento', desc: 'Lembrete quando uma cotação estiver perto de vencer.' },
   { titulo: 'Usuários e acessos', desc: 'Contas da equipe de compras. Hoje são criadas pelo painel do Supabase.' },
   { titulo: 'Exportação de dados', desc: 'Cotações e mapas em planilha.' },

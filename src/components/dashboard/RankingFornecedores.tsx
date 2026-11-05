@@ -13,8 +13,10 @@ export function RankingFornecedores({ items }: { items: RankingItem[] }) {
     <section className="painel">
       <div className="painel-topo">
         <div>
-          <h2 className="painel-titulo">Sugestões do sistema por fornecedor</h2>
-          <p className="text-[12.5px] text-ardosia">Insumos em que cada um tem o melhor score nas cotações vigentes</p>
+          <h2 className="painel-titulo">Menor preço por fornecedor</h2>
+          <p className="text-[12.5px] text-ardosia">
+            Insumos em que cada um tem o menor preço por unidade base nas cotações vigentes
+          </p>
         </div>
       </div>
       {items.length === 0 ? (

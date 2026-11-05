@@ -114,7 +114,7 @@ export function CotacaoForm({ fornecedores, cotacao, action }: Props) {
       <fieldset className="border-t border-linha-2 pt-5">
         <legend className="rotulo pr-3">Condições comerciais</legend>
         <p className="mb-4 mt-1 text-[12.5px] text-ardosia">
-          Entram no score do mapa de cotação. Campo vazio fica neutro na comparação.
+          Aparecem no mapa de cotação ao lado do preço de cada oferta. Deixe vazio o que o fornecedor não informou.
         </p>
         <div className="grid grid-cols-1 gap-x-5 gap-y-5 sm:grid-cols-2">
           <div>

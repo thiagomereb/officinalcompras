@@ -18,7 +18,6 @@ export type ComparativoRow = {
   diferenca_pct: number | null
   prazo_entrega: number | null
   validade: string | null
-  score: number
   unidade: string | null
 }
 

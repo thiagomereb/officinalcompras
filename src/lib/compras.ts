@@ -1,4 +1,4 @@
-import type { CandidatoItem, GrupoInsumo, Pesos } from './comparacao'
+import type { CandidatoItem, GrupoInsumo } from './comparacao'
 import { quantidadeNaBase, type UnidadeQuantidade } from './unidades'
 
 // O que o comprador decidiu para um insumo no mapa
@@ -11,14 +11,17 @@ export type Escolha = {
 
 // A comparação como estava no momento da aprovação. O mapa aprovado e a
 // impressão são desenhados a partir dela, não das cotações (que podem mudar).
+// Versão 1 é da época dos pesos por critério: os grupos vêm ordenados pelo
+// score de então (e trazem os pesos), que fica como estava.
 export type ComparacaoCongelada = {
-  versao: 1
-  pesos: Pesos
+  versao: 1 | 2
   grupos: GrupoInsumo[]
 }
 
 export function ehComparacaoCongelada(v: unknown): v is ComparacaoCongelada {
-  return typeof v === 'object' && v !== null && (v as ComparacaoCongelada).versao === 1 && Array.isArray((v as ComparacaoCongelada).grupos)
+  if (typeof v !== 'object' || v === null) return false
+  const c = v as ComparacaoCongelada
+  return (c.versao === 1 || c.versao === 2) && Array.isArray(c.grupos)
 }
 
 // Cópia da oferta escolhida, no formato que a função aprovar_mapa grava
@@ -39,17 +42,17 @@ export type ItemAprovado = {
   prazo_pagamento_dias: number | null
   frete_fixo: number | null
   validade: string | null
-  score: number
   sugerido: boolean | null
   valor_total: number | null
 }
 
-// O score só sugere: a escolha é sempre do comprador, que pesa coisas que o
-// sistema não vê (tamanho da embalagem, confiança no fornecedor...) e não
-// precisa justificar quando foge da sugestão. Com uma oferta só não há o que
-// sugerir.
+// A sugestão é a oferta de menor preço por unidade base, e só sugere: a escolha
+// é sempre do comprador, que pesa o que o sistema não vê (prazo, frete, tamanho
+// da embalagem, confiança no fornecedor...) e não precisa justificar quando
+// foge dela. Sem ao menos duas ofertas comparáveis não há o que sugerir.
 export function sugestaoDoGrupo(grupo: GrupoInsumo): CandidatoItem | null {
-  return grupo.candidatos.length > 1 ? grupo.candidatos[0] : null
+  const comparaveis = grupo.candidatos.filter((c) => c.preco_comparavel)
+  return comparaveis.length > 1 ? comparaveis[0] : null
 }
 
 const centavos = (v: number) => Math.round(v * 100) / 100
@@ -83,7 +86,7 @@ export type ResultadoAprovacao =
 
 // Confere as escolhas contra a comparação atual e monta a cópia que será
 // congelada. Erros vêm todos de uma vez, para o comprador corrigir de uma vez.
-export function montarAprovacao(grupos: GrupoInsumo[], escolhas: Escolha[], pesos: Pesos): ResultadoAprovacao {
+export function montarAprovacao(grupos: GrupoInsumo[], escolhas: Escolha[]): ResultadoAprovacao {
   const erros: string[] = []
   if (escolhas.length === 0) {
     return { ok: false, erros: ['Escolha o fornecedor de pelo menos um insumo antes de aprovar.'] }
@@ -134,7 +137,6 @@ export function montarAprovacao(grupos: GrupoInsumo[], escolhas: Escolha[], peso
       prazo_pagamento_dias: candidato.prazo_pagamento_dias,
       frete_fixo: candidato.frete_fixo,
       validade: candidato.validade,
-      score: candidato.score,
       sugerido: sugestao ? sugestao.cotacao_item_id === candidato.cotacao_item_id : null,
       valor_total: valor.tipo === 'valor' ? valor.valor : null,
     })
@@ -143,5 +145,5 @@ export function montarAprovacao(grupos: GrupoInsumo[], escolhas: Escolha[], peso
   if (erros.length) return { ok: false, erros }
 
   const valorTotal = centavos(itens.reduce((soma, i) => soma + (i.valor_total ?? 0), 0))
-  return { ok: true, itens, comparacao: { versao: 1, pesos, grupos }, valorTotal }
+  return { ok: true, itens, comparacao: { versao: 2, grupos }, valorTotal }
 }
