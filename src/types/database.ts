@@ -61,7 +61,6 @@ export type Database = {
       }
       cotacao_itens: {
         Row: {
-          cas: string | null
           cotacao_id: string
           created_at: string | null
           descricao_original: string
@@ -78,7 +77,6 @@ export type Database = {
           validade: string | null
         }
         Insert: {
-          cas?: string | null
           cotacao_id: string
           created_at?: string | null
           descricao_original: string
@@ -95,7 +93,6 @@ export type Database = {
           validade?: string | null
         }
         Update: {
-          cas?: string | null
           cotacao_id?: string
           created_at?: string | null
           descricao_original?: string
@@ -254,7 +251,6 @@ export type Database = {
       }
       insumos: {
         Row: {
-          cas_number: string | null
           created_at: string | null
           descricao: string | null
           id: string
@@ -263,7 +259,6 @@ export type Database = {
           updated_at: string | null
         }
         Insert: {
-          cas_number?: string | null
           created_at?: string | null
           descricao?: string | null
           id?: string
@@ -272,7 +267,6 @@ export type Database = {
           updated_at?: string | null
         }
         Update: {
-          cas_number?: string | null
           created_at?: string | null
           descricao?: string | null
           id?: string

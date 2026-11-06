@@ -39,7 +39,6 @@ export default async function EditarInsumoPage({ params }: { params: Promise<{ i
         voltar={{ href: '/insumos', label: 'Insumos' }}
         grupo="Insumo"
         titulo={insumo.nome_padrao}
-        descricao={insumo.cas_number ? <span className="leitura">CAS {insumo.cas_number}</span> : undefined}
         acoes={<ExcluirInsumoButton id={id} action={excluirInsumo} />}
       />
 

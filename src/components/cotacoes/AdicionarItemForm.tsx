@@ -172,11 +172,6 @@ export function AdicionarItemForm({ cotacaoId, action }: Props) {
             </div>
 
             <div>
-              <label htmlFor={campo('cas')} className="legenda">CAS</label>
-              <input id={campo('cas')} name="cas" maxLength={100} className="campo leitura" placeholder="50-81-7" />
-            </div>
-
-            <div>
               <label htmlFor={campo('origem')} className="legenda">País de origem</label>
               <input id={campo('origem')} name="pais_origem" className="campo" placeholder="Brasil" />
             </div>

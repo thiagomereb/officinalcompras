@@ -27,8 +27,7 @@ Retorne SOMENTE um JSON válido neste formato, sem texto antes ou depois:
       "pais_origem": "Brasil",
       "ipi": 0,
       "st": 0,
-      "validade": "2027-05-01",
-      "cas": "50-00-0"
+      "validade": "2027-05-01"
     }
   ]
 }
@@ -42,7 +41,6 @@ REGRAS DOS CAMPOS:
 - ipi: percentual como número (ex: 5 para 5%); use 0 se não informado
 - st: percentual como número (ex: 12 para 12%); use 0 se não informado
 - validade: formato YYYY-MM-DD; use null se não houver
-- cas: número CAS (ex: "50-00-0"); use null se não houver
 - fornecedor.cnpj: use null se não houver
 - fornecedor.data_tabela: use null se não houver
 
@@ -63,7 +61,6 @@ type ItemOCR = {
   ipi: number | null
   st: number | null
   validade: string | null
-  cas: string | null
 }
 
 // Por modelo. A Edge Function tem 150s de wall clock no total, então os dois

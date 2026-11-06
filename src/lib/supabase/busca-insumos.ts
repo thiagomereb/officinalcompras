@@ -4,7 +4,6 @@ export type InsumoOpcao = {
   id: string
   nome_padrao: string
   unidade_padrao: string | null
-  cas_number: string | null
   // Preenchido quando o insumo foi achado por um sinônimo, para mostrar o porquê
   via_sinonimo: string | null
 }
@@ -15,7 +14,7 @@ const LIMITE = 12
 // alternativa — mandar a tabela inteira de insumos junto com a página — pesava
 // no carregamento de cotações e deixava um <select> com milhares de opções.
 export async function buscarInsumos(termo: string): Promise<InsumoOpcao[]> {
-  // Vírgula, parênteses e aspas têm significado na sintaxe do .or() do PostgREST
+  // % e \ são curinga e escape no ilike
   const t = termo.replace(/[,()"\\%]/g, ' ').replace(/\s+/g, ' ').trim()
   if (!t) return []
 
@@ -23,13 +22,13 @@ export async function buscarInsumos(termo: string): Promise<InsumoOpcao[]> {
   const [porNome, porSinonimo, parecidos] = await Promise.all([
     supabase
       .from('insumos')
-      .select('id, nome_padrao, unidade_padrao, cas_number')
-      .or(`nome_padrao.ilike.%${t}%,cas_number.ilike.%${t}%`)
+      .select('id, nome_padrao, unidade_padrao')
+      .ilike('nome_padrao', `%${t}%`)
       .order('nome_padrao')
       .limit(LIMITE),
     supabase
       .from('insumo_sinonimos')
-      .select('sinonimo, insumos(id, nome_padrao, unidade_padrao, cas_number)')
+      .select('sinonimo, insumos(id, nome_padrao, unidade_padrao)')
       .ilike('sinonimo', `%${t}%`)
       .limit(LIMITE),
     // Similaridade (pg_trgm) cobre acento e grafia: "acido ascorbico" acha
@@ -53,7 +52,6 @@ export async function buscarInsumos(termo: string): Promise<InsumoOpcao[]> {
         id: p.insumo_id,
         nome_padrao: p.nome_padrao,
         unidade_padrao: null,
-        cas_number: null,
         via_sinonimo: null,
       })
     }

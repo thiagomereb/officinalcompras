@@ -19,11 +19,11 @@ export default async function InsumosPage({
 
   let query = supabase
     .from('insumos')
-    .select('id, nome_padrao, cas_number, unidade_padrao, descricao, insumo_sinonimos(sinonimo)', { count: 'exact' })
+    .select('id, nome_padrao, unidade_padrao, descricao, insumo_sinonimos(sinonimo)', { count: 'exact' })
     .order('nome_padrao')
     .range(offset, offset + POR_PAGINA - 1)
 
-  // Busca também por CAS e sinônimo ("Vitamina C" acha "Ácido Ascórbico").
+  // Busca também por sinônimo ("Vitamina C" acha "Ácido Ascórbico").
   // Vírgula, parênteses e aspas têm significado na sintaxe do filtro .or() do
   // PostgREST, então saem do termo.
   const termo = q.trim().replace(/[,()"\\%]/g, ' ').trim()
@@ -34,7 +34,7 @@ export default async function InsumosPage({
       .ilike('sinonimo', `%${termo}%`)
       .limit(200)
     const ids = [...new Set((porSinonimo ?? []).map((s) => s.insumo_id))]
-    const filtros = [`nome_padrao.ilike.%${termo}%`, `cas_number.ilike.%${termo}%`]
+    const filtros = [`nome_padrao.ilike.%${termo}%`]
     if (ids.length) filtros.push(`id.in.(${ids.join(',')})`)
     query = query.or(filtros.join(','))
   }
@@ -75,7 +75,7 @@ export default async function InsumosPage({
           <input
             name="q"
             defaultValue={q}
-            placeholder="Buscar por nome, sinônimo ou CAS"
+            placeholder="Buscar por nome ou sinônimo"
             aria-label="Buscar insumos"
             className="campo pl-8"
           />
@@ -88,7 +88,7 @@ export default async function InsumosPage({
           titulo={q ? 'Nenhum insumo encontrado' : 'Nenhum insumo cadastrado'}
           texto={
             q
-              ? `Nada corresponde a “${q}” no nome, nos sinônimos ou no CAS.`
+              ? `Nada corresponde a “${q}” no nome ou nos sinônimos.`
               : 'Cadastre os insumos que a farmácia compra. Os itens das cotações são vinculados a eles.'
           }
           acao={
@@ -106,7 +106,6 @@ export default async function InsumosPage({
               <thead>
                 <tr>
                   <th>Nome padrão</th>
-                  <th>CAS</th>
                   <th>Un.</th>
                   <th>Sinônimos</th>
                   <th>
@@ -126,9 +125,6 @@ export default async function InsumosPage({
                         {insumo.descricao && (
                           <p className="line-clamp-1 text-[12px] text-ardosia">{insumo.descricao}</p>
                         )}
-                      </td>
-                      <td className="leitura whitespace-nowrap text-[12.5px] text-ardosia">
-                        {insumo.cas_number ?? '—'}
                       </td>
                       <td className="text-ardosia">{insumo.unidade_padrao}</td>
                       <td className="max-w-md text-[12.5px] text-ardosia">

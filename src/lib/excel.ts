@@ -13,7 +13,6 @@ const ALIASES: Record<keyof ItemExtraido, string[]> = {
   ipi: ['ipi'],
   st: ['st', 'substituicao tributaria'],
   validade: ['validade', 'vencimento', 'data validade'],
-  cas: ['cas', 'numero cas', 'cas number'],
 }
 
 function semAcento(s: string): string {
@@ -81,7 +80,6 @@ export function formatarData(v: unknown): string | null {
 const ORDEM_PRIORIDADE: (keyof ItemExtraido)[] = [
   'descricao',
   'preco_unitario',
-  'cas',
   'validade',
   'quantidade_embalagem',
   'quantidade',
@@ -159,7 +157,6 @@ export function extrairItensExcel(buffer: ArrayBuffer): ItemExtraido[] {
         ipi: indices.ipi != null ? (parseNumeroBR(linha[indices.ipi]) ?? 0) : 0,
         st: indices.st != null ? (parseNumeroBR(linha[indices.st]) ?? 0) : 0,
         validade: indices.validade != null ? formatarData(linha[indices.validade]) : null,
-        cas: indices.cas != null ? normalizarTexto(linha[indices.cas]) : null,
       }
     })
     .filter((item): item is ItemExtraido => item !== null)

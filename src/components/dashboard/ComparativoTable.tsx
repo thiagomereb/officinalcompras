@@ -9,7 +9,6 @@ import { Vazio } from '@/components/ui/Vazio'
 export type ComparativoRow = {
   insumo_id: string
   insumo_nome: string
-  cas_number: string | null
   melhor_fornecedor: string
   melhor_cotacao_id: string
   // Preços na unidade base (R$/g, R$/mL, R$/un) indicada em `unidade`
@@ -29,7 +28,6 @@ export function ComparativoTable({ rows }: { rows: ComparativoRow[] }) {
     ? rows.filter(
         (r) =>
           r.insumo_nome.toLowerCase().includes(termo) ||
-          (r.cas_number ?? '').toLowerCase().includes(termo) ||
           r.melhor_fornecedor.toLowerCase().includes(termo),
       )
     : rows
@@ -48,7 +46,7 @@ export function ComparativoTable({ rows }: { rows: ComparativoRow[] }) {
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Filtrar por insumo, CAS ou fornecedor"
+            placeholder="Filtrar por insumo ou fornecedor"
             aria-label="Filtrar insumos"
             className="campo campo-sm pl-8"
           />
@@ -63,7 +61,7 @@ export function ComparativoTable({ rows }: { rows: ComparativoRow[] }) {
           texto={
             rows.length === 0
               ? 'Lance uma cotação e vincule os itens aos insumos para ver a comparação aqui.'
-              : `Nenhum insumo, CAS ou fornecedor corresponde a “${search.trim()}”.`
+              : `Nenhum insumo ou fornecedor corresponde a “${search.trim()}”.`
           }
           acao={
             rows.length === 0 && (
@@ -95,7 +93,6 @@ export function ComparativoTable({ rows }: { rows: ComparativoRow[] }) {
                 <tr key={row.insumo_id}>
                   <td className="min-w-[200px]">
                     <p className="font-medium">{row.insumo_nome}</p>
-                    {row.cas_number && <p className="leitura text-[11.5px] text-ardosia">CAS {row.cas_number}</p>}
                   </td>
                   <td className="whitespace-nowrap">
                     <span className="inline-flex items-center gap-2">

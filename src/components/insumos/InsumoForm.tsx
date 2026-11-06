@@ -55,18 +55,6 @@ export function InsumoForm({ insumo, sinonimos = [], action }: Props) {
         </div>
 
         <div>
-          <label htmlFor="i-cas" className="legenda">Número CAS</label>
-          <input
-            id="i-cas"
-            name="cas_number"
-            defaultValue={insumo?.cas_number ?? ''}
-            className="campo leitura"
-            placeholder="50-81-7"
-          />
-          <p className="ajuda">Identifica a substância e evita cadastro duplicado.</p>
-        </div>
-
-        <div>
           <label htmlFor="i-unidade" className="legenda">
             Unidade padrão <span className="obrigatorio">*</span>
           </label>

@@ -24,7 +24,7 @@ type Posicao = { left: number; width: number; top?: number; bottom?: number }
 export function BuscaInsumo({
   name,
   onSelecionar,
-  placeholder = 'Buscar por nome, sinônimo ou CAS…',
+  placeholder = 'Buscar por nome ou sinônimo…',
   compacto = false,
   desabilitado = false,
   autoFocus = false,
@@ -219,11 +219,8 @@ export function BuscaInsumo({
                 className={`cursor-pointer px-3 py-2 ${i === ativo ? 'bg-nevoa' : ''}`}
               >
                 <span className="block text-[13.5px] leading-snug">{o.nome_padrao}</span>
-                {(o.via_sinonimo || o.cas_number) && (
-                  <span className="mt-0.5 flex gap-3 text-[11.5px] text-ardosia">
-                    {o.via_sinonimo && <span>sinônimo: {o.via_sinonimo}</span>}
-                    {o.cas_number && <span className="leitura">CAS {o.cas_number}</span>}
-                  </span>
+                {o.via_sinonimo && (
+                  <span className="mt-0.5 block text-[11.5px] text-ardosia">sinônimo: {o.via_sinonimo}</span>
                 )}
               </li>
             ))

@@ -8,7 +8,6 @@ export type ItemExtraido = {
   ipi: number | null
   st: number | null
   validade: string | null
-  cas: string | null
 }
 
 // O que uma Server Action devolve ao navegador para ele conduzir a extração.

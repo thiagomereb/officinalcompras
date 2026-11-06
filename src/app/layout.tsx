@@ -3,7 +3,7 @@ import { Archivo, IBM_Plex_Mono } from 'next/font/google'
 import './globals.css'
 
 // Archivo para o texto; Plex Mono só para números lidos como medida —
-// preço por grama, CAS, lote.
+// preço por grama, lote.
 const archivo = Archivo({
   variable: '--font-archivo',
   subsets: ['latin'],

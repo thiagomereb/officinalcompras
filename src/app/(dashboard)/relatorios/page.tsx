@@ -9,7 +9,7 @@ const LISTAS = [
   { titulo: 'Mapas de cotação', desc: 'Cada mapa sai em PDF para assinatura pelo “Baixar PDF”.', href: '/mapas' },
   { titulo: 'Cotações recebidas', desc: 'Todas as tabelas de preço, com arquivo original e itens; cada uma sai em PDF.', href: '/cotacoes' },
   { titulo: 'Fornecedores', desc: 'Dados cadastrais e situação de cada fornecedor.', href: '/fornecedores' },
-  { titulo: 'Insumos', desc: 'Tabela mestre com CAS e sinônimos.', href: '/insumos' },
+  { titulo: 'Insumos', desc: 'Tabela mestre com sinônimos.', href: '/insumos' },
 ]
 
 export default async function RelatoriosPage() {

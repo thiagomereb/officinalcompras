@@ -62,7 +62,7 @@ export default async function DashboardPage() {
         .select(
           `id, cotacao_id, insumo_id, preco_unitario, unidade, quantidade_minima, lote, validade,
            cotacoes(id, prazo_entrega_dias, prazo_pagamento_dias, frete_fixo, frete_gratis_acima, pedido_minimo, data_cotacao, validade_cotacao, fornecedores(razao_social, nome_fantasia)),
-           insumos(nome_padrao, cas_number)`,
+           insumos(nome_padrao)`,
         )
         .not('insumo_id', 'is', null)
         .not('preco_unitario', 'is', null)
@@ -89,14 +89,11 @@ export default async function DashboardPage() {
   const mapasNoMes = new Set(comprasMes.map((c) => c.mapa_id)).size
 
   const itemPorId = new Map(rawItems.map((r) => [r.id, r]))
-  const casPorInsumo = new Map(
-    rawItems.map((r) => [r.insumo_id!, (r.insumos as { cas_number: string | null } | null)?.cas_number ?? null]),
-  )
   const dataDoItem = (id: string) => (itemPorId.get(id)?.cotacoes as CotacaoDoItem | null)?.data_cotacao ?? ''
 
   const ofertas: OfertaCotacao[] = rawItems.map((item) => {
     const cot = item.cotacoes as CotacaoDoItem | null
-    const insumo = item.insumos as { nome_padrao: string; cas_number: string | null } | null
+    const insumo = item.insumos as { nome_padrao: string } | null
     const forn = cot?.fornecedores
     return {
       cotacao_item_id: item.id,
@@ -140,7 +137,6 @@ export default async function DashboardPage() {
     return {
       insumo_id: g.insumo_id,
       insumo_nome: g.insumo_nome,
-      cas_number: casPorInsumo.get(g.insumo_id) ?? null,
       melhor_fornecedor: melhor.fornecedor_nome,
       melhor_cotacao_id: melhor.cotacao_id,
       melhor_preco: melhor.preco_base,

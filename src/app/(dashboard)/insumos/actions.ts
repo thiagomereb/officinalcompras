@@ -5,12 +5,11 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { mensagemErroBanco, type Falha } from '@/lib/acoes'
 
-const MSG_DUPLICADO = 'Já existe um insumo com este nome ou número CAS.'
+const MSG_DUPLICADO = 'Já existe um insumo com este nome.'
 
 function dadosDoForm(formData: FormData) {
   return {
     nome_padrao: String(formData.get('nome_padrao') ?? '').trim(),
-    cas_number: (formData.get('cas_number') as string)?.trim() || null,
     unidade_padrao: String(formData.get('unidade_padrao') ?? '').trim() || 'g',
     descricao: (formData.get('descricao') as string)?.trim() || null,
   }

@@ -8,9 +8,8 @@ import type { Tables } from '@/types/database'
 import { CotacaoForm } from '@/components/cotacoes/CotacaoForm'
 import { AdicionarItemForm } from '@/components/cotacoes/AdicionarItemForm'
 import { RemoverItemButton } from '@/components/cotacoes/RemoverItemButton'
-import { atualizarCotacao, adicionarItem, removerItem, excluirCotacao, removerTodosItens, vincularItensAutomatico, vincularItemManualmente, alterarVinculo, alterarCasItem } from '../actions'
+import { atualizarCotacao, adicionarItem, removerItem, excluirCotacao, removerTodosItens, vincularItensAutomatico, vincularItemManualmente, alterarVinculo } from '../actions'
 import { EditarVinculo } from '@/components/cotacoes/EditarVinculo'
-import { EditarCas } from '@/components/cotacoes/EditarCas'
 import { VincularManualmente } from '@/components/cotacoes/VincularManualmente'
 import { ExcluirCotacaoButton } from './ExcluirCotacaoButton'
 import { OcrButton } from '@/components/cotacoes/OcrButton'
@@ -152,7 +151,6 @@ export default async function CotacaoPage({ params, searchParams }: { params: Pr
               <th className="num">IPI</th>
               <th className="num">ST</th>
               <th className="num">Total c/ impostos</th>
-              <th>CAS</th>
               <th>Origem</th>
               <th>Validade</th>
               <th>
@@ -197,9 +195,6 @@ export default async function CotacaoPage({ params, searchParams }: { params: Pr
                   <td className="num text-ardosia">{ipi > 0 ? `${ipi}%` : '—'}</td>
                   <td className="num text-ardosia">{st > 0 ? `${st}%` : '—'}</td>
                   <td className="num leitura font-medium">{moeda(valorComImpostos)}</td>
-                  <td>
-                    <EditarCas itemId={item.id} cotacaoId={id} cas={item.cas} action={alterarCasItem} />
-                  </td>
                   <td className="text-[12.5px] text-ardosia">{item.pais_origem ?? '—'}</td>
                   <td className={vencendo ? 'font-medium text-oxido' : 'text-ardosia'}>
                     {formatDate(item.validade)}
