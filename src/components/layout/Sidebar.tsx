@@ -5,6 +5,7 @@ import Link, { useLinkStatus } from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
   LayoutDashboard,
+  ClipboardList,
   FileText,
   GitCompare,
   History,
@@ -28,6 +29,7 @@ const grupos: { label: string; itens: ItemNav[] }[] = [
     label: 'Compras',
     itens: [
       { href: '/dashboard', label: 'Painel', icone: LayoutDashboard },
+      { href: '/cotacoes-proprias', label: 'Cotações próprias', icone: ClipboardList },
       { href: '/cotacoes', label: 'Cotações', icone: FileText },
       { href: '/mapas', label: 'Mapas de cotação', icone: GitCompare },
       { href: '/compras', label: 'Histórico de compras', icone: History },

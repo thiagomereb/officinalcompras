@@ -125,6 +125,63 @@ export type Database = {
           },
         ]
       }
+      cotacao_propria_itens: {
+        Row: {
+          codigo: string
+          cotacao_propria_id: string
+          created_at: string
+          ean: string | null
+          id: string
+          insumo_id: string
+          nome: string
+          ordem: number
+          quantidade: number
+          teor: number | null
+          unidade: string
+        }
+        Insert: {
+          codigo: string
+          cotacao_propria_id: string
+          created_at?: string
+          ean?: string | null
+          id?: string
+          insumo_id: string
+          nome: string
+          ordem: number
+          quantidade: number
+          teor?: number | null
+          unidade: string
+        }
+        Update: {
+          codigo?: string
+          cotacao_propria_id?: string
+          created_at?: string
+          ean?: string | null
+          id?: string
+          insumo_id?: string
+          nome?: string
+          ordem?: number
+          quantidade?: number
+          teor?: number | null
+          unidade?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cotacao_propria_itens_cotacao_propria_id_fkey"
+            columns: ["cotacao_propria_id"]
+            isOneToOne: false
+            referencedRelation: "cotacoes_proprias"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cotacao_propria_itens_insumo_id_fkey"
+            columns: ["insumo_id"]
+            isOneToOne: false
+            referencedRelation: "insumos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       cotacoes: {
         Row: {
           arquivo_nome: string | null
@@ -183,6 +240,45 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      cotacoes_proprias: {
+        Row: {
+          arquivo_nome: string | null
+          arquivo_url: string | null
+          created_at: string
+          emitida_em: string | null
+          id: string
+          importada_por: string | null
+          numero: string
+          status: string
+          unidade: string | null
+          updated_at: string
+        }
+        Insert: {
+          arquivo_nome?: string | null
+          arquivo_url?: string | null
+          created_at?: string
+          emitida_em?: string | null
+          id?: string
+          importada_por?: string | null
+          numero: string
+          status?: string
+          unidade?: string | null
+          updated_at?: string
+        }
+        Update: {
+          arquivo_nome?: string | null
+          arquivo_url?: string | null
+          created_at?: string
+          emitida_em?: string | null
+          id?: string
+          importada_por?: string | null
+          numero?: string
+          status?: string
+          unidade?: string | null
+          updated_at?: string
+        }
+        Relationships: []
       }
       fornecedores: {
         Row: {
@@ -251,6 +347,7 @@ export type Database = {
       }
       insumos: {
         Row: {
+          codigo: string | null
           created_at: string | null
           descricao: string | null
           id: string
@@ -259,6 +356,7 @@ export type Database = {
           updated_at: string | null
         }
         Insert: {
+          codigo?: string | null
           created_at?: string | null
           descricao?: string | null
           id?: string
@@ -267,6 +365,7 @@ export type Database = {
           updated_at?: string | null
         }
         Update: {
+          codigo?: string | null
           created_at?: string | null
           descricao?: string | null
           id?: string
@@ -502,6 +601,10 @@ export type Database = {
         }[]
       }
       get_secret: { Args: { secret_name: string }; Returns: string }
+      importar_cotacao_propria: {
+        Args: { p_cotacao: Json; p_itens: Json }
+        Returns: string
+      }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
       vincular_itens_cotacao: {
