@@ -1,9 +1,10 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database, Tables } from '@/types/database'
 import { compararOfertas, agruparPorInsumo, type OfertaCotacao, type GrupoInsumo } from './comparacao'
-import { ehComparacaoCongelada, valorEstimado } from './compras'
+import { ehComparacaoCongelada } from './compras'
 import { ehUnidadeQuantidade, type UnidadeQuantidade } from './unidades'
 import { buscarTodos, emLotes } from './supabase/consultas'
+import type { EscolhaImpressa, PedidoMapa } from './mapa-impresso'
 
 type Fornecedor = { razao_social: string; nome_fantasia: string | null } | null
 
@@ -148,26 +149,33 @@ export async function carregarUltimasCompras(
   return ultimas
 }
 
-export type EscolhaDocumento = {
-  cotacao_item_id: string
-  quantidade: number | null
-  quantidade_unidade: UnidadeQuantidade | null
-  valor: number | null
+// Nome de cada fornecedor dos orçamentos, como aparece nas ofertas do mapa
+async function fornecedoresDosOrcamentos(supabase: SupabaseClient<Database>, orcamentos: string[]): Promise<string[]> {
+  if (!orcamentos.length) return []
+  const { data, error } = await supabase.from('cotacoes').select('fornecedores(razao_social, nome_fantasia)').in('id', orcamentos)
+  if (error) throw new Error(error.message)
+  return (data ?? []).map((c) => {
+    const f = c.fornecedores as Fornecedor
+    return f?.nome_fantasia ?? f?.razao_social ?? '—'
+  })
 }
 
 export type DocumentoMapa = {
   mapa: Tables<'mapas_cotacao'>
-  rascunho: boolean
   // Quantos orçamentos o mapa compara
   orcamentos: number
+  // Cotação própria do mapa, os produtos pedidos nela (na ordem do ERP) e os
+  // fornecedores dos orçamentos comparados
+  cotacaoPropria: { numero: string } | null
+  pedidos: PedidoMapa[]
+  fornecedores: string[]
   grupos: GrupoInsumo[]
-  escolhas: Map<string, EscolhaDocumento>
-  // Rascunho: soma estimada na hora; aprovado: o valor gravado na aprovação
-  total: number | null
+  // Escolha do comprador por insumo: é o asterisco do mapa impresso
+  escolhas: Map<string, EscolhaImpressa>
 }
 
-// Tudo que o documento do mapa (PDF) precisa. Aprovado sai da cópia
-// congelada, como a tela; rascunho é calculado com os dados atuais.
+// Tudo que o mapa impresso (PDF) precisa. Aprovado sai da cópia congelada,
+// como a tela; rascunho usa os dados atuais.
 export async function carregarDocumentoMapa(
   supabase: SupabaseClient<Database>,
   id: string,
@@ -179,31 +187,37 @@ export async function carregarDocumentoMapa(
   const congelada = ehComparacaoCongelada(mapa.comparacao) ? mapa.comparacao : null
   const orcamentos = await orcamentosDoMapa(supabase, mapa)
 
-  const [grupos, { data: linhas }] = await Promise.all([
+  const [grupos, { data: linhas }, { data: cotacaoPropria }, pedidos, fornecedores] = await Promise.all([
     congelada && !rascunho ? Promise.resolve(congelada.grupos) : carregarGruposMapa(supabase, orcamentos),
     supabase
       .from('mapa_cotacao_itens')
-      .select('insumo_id, cotacao_item_id, quantidade, quantidade_unidade, valor_total')
+      .select('insumo_id, cotacao_item_id, quantidade, quantidade_unidade')
       .eq('mapa_id', id),
+    mapa.cotacao_propria_id
+      ? supabase.from('cotacoes_proprias').select('numero').eq('id', mapa.cotacao_propria_id).single()
+      : Promise.resolve({ data: null }),
+    mapa.cotacao_propria_id
+      ? buscarTodos((de, ate) =>
+          supabase
+            .from('cotacao_propria_itens')
+            .select('codigo, nome, quantidade, unidade, insumo_id')
+            .eq('cotacao_propria_id', mapa.cotacao_propria_id!)
+            .order('ordem')
+            .range(de, ate),
+        )
+      : Promise.resolve([] as PedidoMapa[]),
+    fornecedoresDosOrcamentos(supabase, orcamentos),
   ])
 
-  const candidatoPorItem = new Map(grupos.flatMap((g) => g.candidatos.map((c) => [c.cotacao_item_id, c] as const)))
-  const escolhas = new Map<string, EscolhaDocumento>()
+  const escolhas = new Map<string, EscolhaImpressa>()
   for (const l of linhas ?? []) {
     if (!l.cotacao_item_id) continue
-    const unidade = ehUnidadeQuantidade(l.quantidade_unidade) ? l.quantidade_unidade : null
-    let valor = l.valor_total
-    if (rascunho) {
-      const candidato = candidatoPorItem.get(l.cotacao_item_id)
-      const estimado = candidato ? valorEstimado(candidato, l.quantidade, unidade) : null
-      valor = estimado?.tipo === 'valor' ? estimado.valor : null
-    }
-    escolhas.set(l.insumo_id, { cotacao_item_id: l.cotacao_item_id, quantidade: l.quantidade, quantidade_unidade: unidade, valor })
+    escolhas.set(l.insumo_id, {
+      cotacao_item_id: l.cotacao_item_id,
+      quantidade: l.quantidade,
+      quantidade_unidade: ehUnidadeQuantidade(l.quantidade_unidade) ? l.quantidade_unidade : null,
+    })
   }
 
-  const total = rascunho
-    ? [...escolhas.values()].reduce((soma, e) => soma + (e.valor ?? 0), 0)
-    : mapa.valor_total
-
-  return { mapa, rascunho, orcamentos: orcamentos.length, grupos, escolhas, total }
+  return { mapa, orcamentos: orcamentos.length, cotacaoPropria, pedidos, fornecedores, grupos, escolhas }
 }

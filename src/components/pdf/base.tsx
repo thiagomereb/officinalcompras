@@ -145,14 +145,6 @@ export function Tabela<T>({
   )
 }
 
-export function Marcador() {
-  return (
-    <Svg viewBox="0 0 10 10" width={8} height={8}>
-      <Path d="M1.5 5.5 L4 8 L8.5 2" stroke={COR.grafite} strokeWidth={1.4} fill="none" />
-    </Svg>
-  )
-}
-
 const brl = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
 export const moeda = (v: number) => brl.format(v)
 
