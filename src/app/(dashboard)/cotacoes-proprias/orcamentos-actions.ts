@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { removerArquivos } from '@/lib/supabase/storage'
 import { emLotes } from '@/lib/supabase/consultas'
-import { chaveDescricao, itemParaGravar, itemValido, type ItemOrcamentoLido } from '@/lib/orcamento'
+import { chaveDescricao, itemParaGravar, itemValido, soDigitos, type ItemOrcamentoLido } from '@/lib/orcamento'
 import type { Falha } from '@/lib/acoes'
 import type { Json } from '@/types/database'
 
@@ -122,6 +122,15 @@ export async function salvarOrcamento(payload: unknown): Promise<{ id: string } 
   if (erroItens) {
     await supabase.from('cotacoes').delete().eq('id', orcamento.id)
     return { erro: erroItens.message }
+  }
+
+  // Fornecedor escolhido à mão e sem CNPJ no cadastro guarda o do orçamento,
+  // para ser reconhecido sozinho no próximo
+  const cnpj = soDigitos(texto(c.cnpj, 30))
+  if (cnpj.length === 14) {
+    const formatado = cnpj.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5')
+    await supabase.from('fornecedores').update({ cnpj: formatado }).eq('id', fornecedorId).is('cnpj', null)
+    revalidatePath('/fornecedores')
   }
 
   revalidatePath(caminho(cotacaoPropriaId))

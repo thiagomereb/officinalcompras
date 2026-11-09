@@ -11,7 +11,7 @@ export default async function NovoOrcamentoPage({ params }: { params: Promise<{ 
 
   const [{ data: cotacao }, { data: fornecedores }, pedidos] = await Promise.all([
     supabase.from('cotacoes_proprias').select('numero').eq('id', id).single(),
-    supabase.from('fornecedores').select('id, razao_social, nome_fantasia, cnpj').eq('ativo', true).order('razao_social'),
+    supabase.from('fornecedores').select('id, razao_social, nome_fantasia, cnpj, codigo').eq('ativo', true).order('razao_social'),
     buscarTodos((de, ate) =>
       supabase.from('cotacao_propria_itens').select('codigo, nome').eq('cotacao_propria_id', id).order('ordem').range(de, ate),
     ),

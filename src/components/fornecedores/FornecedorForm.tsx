@@ -79,6 +79,18 @@ export function FornecedorForm({ fornecedor, action }: Props) {
         </div>
 
         <div>
+          <label htmlFor="f-codigo" className="legenda">Código no sistema da farmácia</label>
+          <input
+            id="f-codigo"
+            name="codigo"
+            inputMode="numeric"
+            defaultValue={fornecedor?.codigo ?? ''}
+            className="campo leitura"
+            placeholder="1544"
+          />
+        </div>
+
+        <div>
           <label htmlFor="f-cnpj" className="legenda">CNPJ</label>
           <input
             id="f-cnpj"
@@ -104,7 +116,7 @@ export function FornecedorForm({ fornecedor, action }: Props) {
           />
         </div>
 
-        <div className="sm:col-span-2">
+        <div>
           <label htmlFor="f-email" className="legenda">E-mail</label>
           <input
             id="f-email"

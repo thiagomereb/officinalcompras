@@ -322,6 +322,7 @@ export type Database = {
         Row: {
           ativo: boolean | null
           cnpj: string | null
+          codigo: string | null
           created_at: string | null
           email: string | null
           id: string
@@ -333,6 +334,7 @@ export type Database = {
         Insert: {
           ativo?: boolean | null
           cnpj?: string | null
+          codigo?: string | null
           created_at?: string | null
           email?: string | null
           id?: string
@@ -344,6 +346,7 @@ export type Database = {
         Update: {
           ativo?: boolean | null
           cnpj?: string | null
+          codigo?: string | null
           created_at?: string | null
           email?: string | null
           id?: string

@@ -11,7 +11,21 @@ import { precoPorUnidadeBase } from '@/lib/unidades'
 import { LeituraPreco } from '@/components/ui/LeituraPreco'
 import type { salvarOrcamento } from '@/app/(dashboard)/cotacoes-proprias/orcamentos-actions'
 
-type Fornecedor = { id: string; razao_social: string; nome_fantasia: string | null; cnpj: string | null }
+type Fornecedor = { id: string; razao_social: string; nome_fantasia: string | null; cnpj: string | null; codigo: string | null }
+
+const nomeFornecedor = (f: Fornecedor) => f.nome_fantasia ?? f.razao_social
+
+// Fornecedor do orçamento pelo CNPJ: o exato primeiro; senão a raiz (8 primeiros
+// dígitos), que é a mesma em todas as filiais da empresa. Só escolhe sozinho
+// quando sobra um; com mais de um, devolve os candidatos para o comprador.
+function reconhecerFornecedor(fornecedores: Fornecedor[], cnpj: string | null): { id: string; candidatos: Fornecedor[] } {
+  const digitos = soDigitos(cnpj)
+  if (digitos.length < 8) return { id: '', candidatos: [] }
+  const exatos = fornecedores.filter((f) => soDigitos(f.cnpj) === digitos)
+  if (exatos.length === 1) return { id: exatos[0].id, candidatos: [] }
+  const mesmaRaiz = exatos.length ? exatos : fornecedores.filter((f) => soDigitos(f.cnpj).slice(0, 8) === digitos.slice(0, 8))
+  return mesmaRaiz.length === 1 ? { id: mesmaRaiz[0].id, candidatos: [] } : { id: '', candidatos: mesmaRaiz }
+}
 
 interface Props {
   cotacaoPropriaId: string
@@ -29,6 +43,7 @@ export function AdicionarOrcamento({ cotacaoPropriaId, fornecedores, pedidos, ac
   const [arquivo, setArquivo] = useState<File | null>(null)
   const [lido, setLido] = useState<(OrcamentoLido & { paginas: number }) | null>(null)
   const [fornecedorId, setFornecedorId] = useState('')
+  const [candidatos, setCandidatos] = useState<Fornecedor[]>([])
   const [progresso, setProgresso] = useState<string | null>(null)
   const [erro, setErro] = useState<string | null>(null)
   const [salvando, startTransition] = useTransition()
@@ -47,10 +62,9 @@ export function AdicionarOrcamento({ cotacaoPropriaId, fornecedores, pedidos, ac
         setErro('Não encontrei itens com preço neste arquivo.')
         return
       }
-      // Fornecedor pelo CNPJ do documento
-      const cnpj = soDigitos(r.cabecalho.cnpj)
-      const achado = cnpj ? fornecedores.find((x) => soDigitos(x.cnpj) === cnpj) : undefined
-      setFornecedorId(achado?.id ?? '')
+      const reconhecido = reconhecerFornecedor(fornecedores, r.cabecalho.cnpj)
+      setFornecedorId(reconhecido.id)
+      setCandidatos(reconhecido.candidatos)
       setLido(r)
     } catch (e) {
       setErro((e as Error).message)
@@ -163,16 +177,32 @@ export function AdicionarOrcamento({ cotacaoPropriaId, fornecedores, pedidos, ac
                   <option value="">Escolha…</option>
                   {fornecedores.map((f) => (
                     <option key={f.id} value={f.id}>
-                      {f.nome_fantasia ?? f.razao_social}
+                      {nomeFornecedor(f)}
+                      {f.codigo ? ` · ${f.codigo}` : ''}
                     </option>
                   ))}
                 </select>
-                {cab.cnpj && !fornecedorId && (
+                {cab.cnpj && !fornecedorId && candidatos.length > 0 && (
+                  <div className="ajuda">
+                    CNPJ do orçamento: <span className="leitura">{cab.cnpj}</span>. Mesma empresa no cadastro:
+                    <span className="mt-1 flex flex-wrap gap-1">
+                      {candidatos.map((f) => (
+                        <button key={f.id} type="button" onClick={() => setFornecedorId(f.id)} className="btn btn-secundario btn-sm h-7">
+                          {nomeFornecedor(f)}
+                          {f.codigo && <span className="leitura text-ardosia">{f.codigo}</span>}
+                        </button>
+                      ))}
+                    </span>
+                  </div>
+                )}
+                {cab.cnpj && !fornecedorId && candidatos.length === 0 && (
                   <p className="ajuda">
-                    CNPJ do orçamento: <span className="leitura">{cab.cnpj}</span>, sem fornecedor com esse CNPJ no cadastro.{' '}
+                    CNPJ do orçamento: <span className="leitura">{cab.cnpj}</span>, sem fornecedor com esse CNPJ no cadastro.
+                    Escolha na lista (o CNPJ fica guardado nele) ou{' '}
                     <Link href="/fornecedores/novo" className="underline underline-offset-2" target="_blank">
-                      Cadastrar
+                      cadastre
                     </Link>
+                    .
                   </p>
                 )}
               </div>

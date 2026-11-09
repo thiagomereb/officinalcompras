@@ -5,11 +5,13 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { mensagemErroBanco, type Falha } from '@/lib/acoes'
 
-const MSG_CNPJ_DUPLICADO = 'Já existe um fornecedor cadastrado com este CNPJ.'
+const MSG_DUPLICADO = 'Já existe um fornecedor com este código.'
 
 function dadosDoForm(formData: FormData) {
   return {
     razao_social: String(formData.get('razao_social') ?? '').trim(),
+    // Código do fornecedor no sistema da farmácia
+    codigo: String(formData.get('codigo') ?? '').replace(/\D/g, '').slice(0, 10) || null,
     nome_fantasia: (formData.get('nome_fantasia') as string)?.trim() || null,
     cnpj: (formData.get('cnpj') as string)?.trim() || null,
     email: (formData.get('email') as string)?.trim() || null,
@@ -24,7 +26,7 @@ export async function criarFornecedor(formData: FormData): Promise<Falha | void>
   if (!dados.razao_social) return { erro: 'Informe a razão social.' }
 
   const { error } = await supabase.from('fornecedores').insert(dados)
-  if (error) return { erro: mensagemErroBanco(error, { duplicado: MSG_CNPJ_DUPLICADO }) }
+  if (error) return { erro: mensagemErroBanco(error, { duplicado: MSG_DUPLICADO }) }
 
   revalidatePath('/fornecedores')
   redirect('/fornecedores')
@@ -39,7 +41,7 @@ export async function atualizarFornecedor(id: string, formData: FormData): Promi
   if (!dados.razao_social) return { erro: 'Informe a razão social.' }
 
   const { error } = await supabase.from('fornecedores').update(dados).eq('id', id)
-  if (error) return { erro: mensagemErroBanco(error, { duplicado: MSG_CNPJ_DUPLICADO }) }
+  if (error) return { erro: mensagemErroBanco(error, { duplicado: MSG_DUPLICADO }) }
 
   revalidatePath('/fornecedores')
   redirect('/fornecedores')
