@@ -8,7 +8,8 @@ import { unirPaginas, type OrcamentoLido } from './orcamento'
 // limite de tempo dela, e o comprador vê o andamento.
 
 type Pagina = { texto: string } | { imagem: Blob; ext: string; tipo: string }
-type Progresso = (mensagem: string) => void
+// etapa: em que página da leitura está (para a barra de progresso)
+type Progresso = (mensagem: string, etapa?: { atual: number; total: number }) => void
 
 // Página de PDF com menos texto que isso é tratada como escaneada (vai como imagem)
 const MIN_TEXTO_PAGINA = 80
@@ -148,7 +149,10 @@ export async function lerOrcamento(
 
   const respostas: Record<string, unknown>[] = []
   for (const [i, pagina] of paginas.entries()) {
-    progresso?.(paginas.length > 1 ? `Lendo a página ${i + 1} de ${paginas.length}…` : 'Lendo o orçamento…')
+    progresso?.(paginas.length > 1 ? `Lendo a página ${i + 1} de ${paginas.length}…` : 'Lendo o orçamento…', {
+      atual: i + 1,
+      total: paginas.length,
+    })
     respostas.push(await lerPagina(cotacaoPropriaId, pagina, i + 1, paginas.length, progresso))
   }
   const lido = unirPaginas(respostas)

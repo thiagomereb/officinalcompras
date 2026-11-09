@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { Paperclip, Plus, FileText } from 'lucide-react'
+import { Paperclip, FileText } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { getArquivoSignedUrl } from '@/lib/supabase/storage'
 import { buscarTodos } from '@/lib/supabase/consultas'
@@ -12,16 +12,25 @@ import {
   type ProdutoPedido,
 } from '@/components/cotacoes-proprias/ProdutosCotacaoPropria'
 import type { OfertaProduto } from '@/lib/ofertas-cotacao'
+import { AdicionarOrcamento } from '@/components/cotacoes-proprias/AdicionarOrcamento'
 import { ExcluirCotacaoPropriaButton } from './ExcluirCotacaoPropriaButton'
 import { excluirCotacaoPropria } from '../actions'
+import { dadosParaNovoOrcamento, salvarOrcamento } from '../orcamentos-actions'
 
 const moeda = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 const dataCurta = (d: string) => new Date(d + 'T12:00:00').toLocaleDateString('pt-BR')
 const dataHora = (iso: string) =>
   new Date(iso).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short', timeZone: 'America/Sao_Paulo' })
 
-export default async function CotacaoPropriaPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function CotacaoPropriaPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>
+  searchParams: Promise<{ adicionar?: string }>
+}) {
   const { id } = await params
+  const { adicionar } = await searchParams
   const supabase = await createClient()
 
   const { data: cotacao } = await supabase.from('cotacoes_proprias').select('*').eq('id', id).single()
@@ -133,10 +142,12 @@ export default async function CotacaoPropriaPage({ params }: { params: Promise<{
               </a>
             )}
             <ExcluirCotacaoPropriaButton id={id} numero={cotacao.numero} action={excluirCotacaoPropria} />
-            <Link href={`/cotacoes-proprias/${id}/orcamentos/novo`} className="btn btn-primario btn-sm">
-              <Plus size={14} />
-              Adicionar orçamento
-            </Link>
+            <AdicionarOrcamento
+              cotacaoPropriaId={id}
+              carregarDados={dadosParaNovoOrcamento}
+              salvar={salvarOrcamento}
+              abrirAoCarregar={adicionar === '1'}
+            />
           </>
         }
       />
@@ -169,11 +180,7 @@ export default async function CotacaoPropriaPage({ params }: { params: Promise<{
             icone={FileText}
             titulo="Nenhum orçamento ainda"
             texto="Suba o PDF, a planilha ou a foto do orçamento: a IA lê os preços e liga cada item a um produto pedido."
-            acao={
-              <Link href={`/cotacoes-proprias/${id}/orcamentos/novo`} className="btn btn-primario btn-sm">
-                Adicionar orçamento
-              </Link>
-            }
+            acao={<AdicionarOrcamento cotacaoPropriaId={id} carregarDados={dadosParaNovoOrcamento} salvar={salvarOrcamento} />}
           />
         ) : (
           <div className="overflow-x-auto">

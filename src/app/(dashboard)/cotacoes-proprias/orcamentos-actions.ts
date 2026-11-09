@@ -3,7 +3,11 @@
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { removerArquivos } from '@/lib/supabase/storage'
-import { emLotes } from '@/lib/supabase/consultas'
+import { buscarTodos, emLotes } from '@/lib/supabase/consultas'
+import { carregarPedidosComSinonimos } from '@/lib/pedidos'
+import { ehFornecedorDeCompra } from '@/lib/fornecedores'
+import type { FornecedorCadastro } from '@/lib/reconhecer-fornecedor'
+import type { ProdutoPedidoOpcao } from '@/lib/busca-pedidos'
 import { chaveDescricao, itemParaGravar, itemValido, soDigitos } from '@/lib/orcamento'
 import type { Falha } from '@/lib/acoes'
 import type { Json } from '@/types/database'
@@ -38,6 +42,45 @@ async function aprender(supabase: Supabase, pares: { descricao: string; insumo_i
   const { error } = await supabase.rpc('aprender_sinonimos', { p_pares: pares as unknown as Json })
   if (error) console.warn(`[orcamentos] não foi possível guardar sinônimos: ${error.message}`)
   else revalidatePath('/insumos', 'layout')
+}
+
+// O que o modal de novo orçamento precisa, carregado só quando ele abre: os
+// fornecedores de compra (para escolher e reconhecer) e os produtos pedidos com
+// os sinônimos (para corrigir os vínculos)
+export async function dadosParaNovoOrcamento(
+  cotacaoPropriaId: string,
+): Promise<{ fornecedores: FornecedorCadastro[]; pedidos: ProdutoPedidoOpcao[] } | Falha> {
+  if (!UUID.test(cotacaoPropriaId)) return { erro: 'Cotação inválida.' }
+  const supabase = await createClient()
+  try {
+    const [todos, pedidos] = await Promise.all([
+      buscarTodos((de, ate) =>
+        supabase
+          .from('fornecedores')
+          .select('id, razao_social, nome_fantasia, cnpj, codigo, credenciado, tipo')
+          .eq('ativo', true)
+          .order('razao_social')
+          .order('id')
+          .range(de, ate),
+      ),
+      carregarPedidosComSinonimos(supabase, cotacaoPropriaId),
+    ])
+    return {
+      fornecedores: todos
+        .filter((f) => ehFornecedorDeCompra(f.tipo))
+        .map((f) => ({
+          id: f.id,
+          razao_social: f.razao_social,
+          nome_fantasia: f.nome_fantasia,
+          cnpj: f.cnpj,
+          codigo: f.codigo,
+          credenciado: f.credenciado,
+        })),
+      pedidos: pedidos.map(({ id, codigo, nome, sinonimos }) => ({ id, codigo, nome, sinonimos })),
+    }
+  } catch (e) {
+    return { erro: (e as Error).message }
+  }
 }
 
 export async function salvarOrcamento(payload: unknown): Promise<{ id: string } | Falha> {
