@@ -62,6 +62,7 @@ export type Database = {
       cotacao_itens: {
         Row: {
           cotacao_id: string
+          cotacao_propria_item_id: string | null
           created_at: string | null
           descricao_original: string
           id: string
@@ -75,15 +76,12 @@ export type Database = {
           st: number | null
           unidade: string | null
           validade: string | null
-          cotacao_propria_item_id: string | null
           vinculo_obs: string | null
           vinculo_origem: string | null
         }
         Insert: {
           cotacao_id: string
           cotacao_propria_item_id?: string | null
-          vinculo_obs?: string | null
-          vinculo_origem?: string | null
           created_at?: string | null
           descricao_original: string
           id?: string
@@ -97,12 +95,12 @@ export type Database = {
           st?: number | null
           unidade?: string | null
           validade?: string | null
+          vinculo_obs?: string | null
+          vinculo_origem?: string | null
         }
         Update: {
           cotacao_id?: string
           cotacao_propria_item_id?: string | null
-          vinculo_obs?: string | null
-          vinculo_origem?: string | null
           created_at?: string | null
           descricao_original?: string
           id?: string
@@ -116,6 +114,8 @@ export type Database = {
           st?: number | null
           unidade?: string | null
           validade?: string | null
+          vinculo_obs?: string | null
+          vinculo_origem?: string | null
         }
         Relationships: [
           {
@@ -126,17 +126,17 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "cotacao_itens_insumo_id_fkey"
-            columns: ["insumo_id"]
-            isOneToOne: false
-            referencedRelation: "insumos"
-            referencedColumns: ["id"]
-          },
-          {
             foreignKeyName: "cotacao_itens_cotacao_propria_item_id_fkey"
             columns: ["cotacao_propria_item_id"]
             isOneToOne: false
             referencedRelation: "cotacao_propria_itens"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cotacao_itens_insumo_id_fkey"
+            columns: ["insumo_id"]
+            isOneToOne: false
+            referencedRelation: "insumos"
             referencedColumns: ["id"]
           },
         ]
@@ -202,79 +202,79 @@ export type Database = {
         Row: {
           arquivo_nome: string | null
           arquivo_url: string | null
+          cotacao_propria_id: string
           created_at: string | null
           data_cotacao: string
           erro_msg: string | null
           fornecedor_id: string
           frete_fixo: number | null
           frete_gratis_acima: number | null
+          frete_tipo: string | null
           id: string
+          numero_orcamento: string | null
           pedido_minimo: number | null
           prazo_entrega_dias: number | null
           prazo_pagamento_dias: number | null
           status: string
-          validade_cotacao: string | null
-          cotacao_propria_id: string
-          numero_orcamento: string | null
-          validade_texto: string | null
-          frete_tipo: string | null
           total_documento: number | null
+          validade_cotacao: string | null
+          validade_texto: string | null
         }
         Insert: {
-          cotacao_propria_id: string
-          numero_orcamento?: string | null
-          validade_texto?: string | null
-          frete_tipo?: string | null
-          total_documento?: number | null
           arquivo_nome?: string | null
           arquivo_url?: string | null
+          cotacao_propria_id: string
           created_at?: string | null
           data_cotacao?: string
           erro_msg?: string | null
           fornecedor_id: string
           frete_fixo?: number | null
           frete_gratis_acima?: number | null
+          frete_tipo?: string | null
           id?: string
+          numero_orcamento?: string | null
           pedido_minimo?: number | null
           prazo_entrega_dias?: number | null
           prazo_pagamento_dias?: number | null
           status?: string
+          total_documento?: number | null
           validade_cotacao?: string | null
+          validade_texto?: string | null
         }
         Update: {
-          cotacao_propria_id?: string
-          numero_orcamento?: string | null
-          validade_texto?: string | null
-          frete_tipo?: string | null
-          total_documento?: number | null
           arquivo_nome?: string | null
           arquivo_url?: string | null
+          cotacao_propria_id?: string
           created_at?: string | null
           data_cotacao?: string
           erro_msg?: string | null
           fornecedor_id?: string
           frete_fixo?: number | null
           frete_gratis_acima?: number | null
+          frete_tipo?: string | null
           id?: string
+          numero_orcamento?: string | null
           pedido_minimo?: number | null
           prazo_entrega_dias?: number | null
           prazo_pagamento_dias?: number | null
           status?: string
+          total_documento?: number | null
           validade_cotacao?: string | null
+          validade_texto?: string | null
         }
         Relationships: [
-          {
-            foreignKeyName: "cotacoes_fornecedor_id_fkey"
-            columns: ["fornecedor_id"]
-            isOneToOne: false
-            referencedRelation: "fornecedores"
-            referencedColumns: ["id"]
-          },
           {
             foreignKeyName: "cotacoes_cotacao_propria_id_fkey"
             columns: ["cotacao_propria_id"]
             isOneToOne: false
             referencedRelation: "cotacoes_proprias"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cotacoes_fornecedor_id_fkey"
+            columns: ["fornecedor_id"]
+            isOneToOne: false
+            referencedRelation: "fornecedores"
             referencedColumns: ["id"]
           },
         ]
