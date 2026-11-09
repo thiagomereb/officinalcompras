@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { mensagemErroBanco, type Falha } from '@/lib/acoes'
+import { TIPOS_FORNECEDOR } from '@/lib/fornecedores'
 
 const MSG_DUPLICADO = 'Já existe um fornecedor com este código.'
 
@@ -16,6 +17,9 @@ function dadosDoForm(formData: FormData) {
     cnpj: (formData.get('cnpj') as string)?.trim() || null,
     email: (formData.get('email') as string)?.trim() || null,
     telefone: (formData.get('telefone') as string)?.trim() || null,
+    tipo: (TIPOS_FORNECEDOR as readonly string[]).includes(String(formData.get('tipo'))) ? String(formData.get('tipo')) : null,
+    // O form manda um hidden 'false' antes do checkbox 'true'
+    credenciado: formData.getAll('credenciado').includes('true'),
   }
 }
 

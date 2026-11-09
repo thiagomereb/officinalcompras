@@ -4,6 +4,7 @@ import { useActionState } from 'react'
 import Link from 'next/link'
 import type { Tables } from '@/types/database'
 import type { Falha } from '@/lib/acoes'
+import { TIPOS_FORNECEDOR } from '@/lib/fornecedores'
 
 type Fornecedor = Tables<'fornecedores'>
 
@@ -126,6 +127,27 @@ export function FornecedorForm({ fornecedor, action }: Props) {
             className="campo"
             placeholder="contato@fornecedor.com.br"
           />
+        </div>
+
+        <div>
+          <label htmlFor="f-tipo" className="legenda">Tipo</label>
+          <select id="f-tipo" name="tipo" defaultValue={fornecedor?.tipo ?? 'MATÉRIA PRIMA'} className="campo">
+            {TIPOS_FORNECEDOR.map((t) => (
+              <option key={t} value={t}>
+                {t.charAt(0) + t.slice(1).toLowerCase()}
+              </option>
+            ))}
+          </select>
+          <p className="ajuda">Só matéria-prima, embalagens e industrializados aparecem para orçamento.</p>
+        </div>
+
+        <div className="flex items-end pb-7">
+          {/* O hidden garante que "desmarcado" também chegue à action */}
+          <input type="hidden" name="credenciado" value="false" />
+          <label className="flex cursor-pointer items-center gap-3">
+            <input type="checkbox" name="credenciado" value="true" defaultChecked={fornecedor?.credenciado ?? false} />
+            <span className="text-[13.5px] font-medium">Credenciado</span>
+          </label>
         </div>
 
         {fornecedor && (

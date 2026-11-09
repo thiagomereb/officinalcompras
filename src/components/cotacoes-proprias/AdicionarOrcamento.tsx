@@ -29,6 +29,7 @@ type Vinculo = { codigo: string | null; conferido: boolean }
 type Filtro = 'ligados' | 'fora' | 'todos'
 
 const moeda = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+const MAX_ALTERNATIVAS = 6
 
 export function AdicionarOrcamento({ cotacaoPropriaId, fornecedores, pedidos, action }: Props) {
   const router = useRouter()
@@ -207,8 +208,10 @@ export function AdicionarOrcamento({ cotacaoPropriaId, fornecedores, pedidos, ac
                     )}
                     {fornecedorId ? 'Outras empresas do mesmo CNPJ:' : 'Empresas do mesmo CNPJ no cadastro:'}
                     <span className="mt-1 flex flex-wrap gap-1">
-                      {[...reconhecimento!.alternativas, ...fornecedores.filter((f) => f.id === reconhecimento!.id)]
+                      {[...fornecedores.filter((f) => f.id === reconhecimento!.id), ...reconhecimento!.alternativas]
                         .filter((f) => f.id !== fornecedorId)
+                        // As mais parecidas com o cabeçalho; as demais seguem na lista acima
+                        .slice(0, MAX_ALTERNATIVAS)
                         .map((f) => (
                           <button key={f.id} type="button" onClick={() => setFornecedorId(f.id)} className="btn btn-secundario btn-sm h-7">
                             {nomeFornecedor(f)}

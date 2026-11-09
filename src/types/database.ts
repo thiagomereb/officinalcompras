@@ -324,11 +324,13 @@ export type Database = {
           cnpj: string | null
           codigo: string | null
           created_at: string | null
+          credenciado: boolean | null
           email: string | null
           id: string
           nome_fantasia: string | null
           razao_social: string
           telefone: string | null
+          tipo: string | null
           updated_at: string | null
         }
         Insert: {
@@ -336,11 +338,13 @@ export type Database = {
           cnpj?: string | null
           codigo?: string | null
           created_at?: string | null
+          credenciado?: boolean | null
           email?: string | null
           id?: string
           nome_fantasia?: string | null
           razao_social: string
           telefone?: string | null
+          tipo?: string | null
           updated_at?: string | null
         }
         Update: {
@@ -348,11 +352,13 @@ export type Database = {
           cnpj?: string | null
           codigo?: string | null
           created_at?: string | null
+          credenciado?: boolean | null
           email?: string | null
           id?: string
           nome_fantasia?: string | null
           razao_social?: string
           telefone?: string | null
+          tipo?: string | null
           updated_at?: string | null
         }
         Relationships: []

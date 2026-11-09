@@ -52,6 +52,47 @@ describe('reconhecerFornecedor', () => {
     expect([r.id, ...r.alternativas.map((x) => x.id)].sort()).toEqual(['6', '7'])
   })
 
+  it('mesmo nome no grupo: fica o credenciado', () => {
+    const grupo = [
+      f('10', 'DELTA INSUMOS LTDA', '33.444.555/0002-00'),
+      { ...f('11', 'DELTA INSUMOS LTDA', '33.444.555/0003-00'), credenciado: true },
+    ]
+    expect(reconhecerFornecedor(grupo, '33.444.555/0009-00', 'Delta Insumos Ltda')).toMatchObject({ id: '11', motivo: 'nome' })
+  })
+
+  it('CNPJ exato: as alternativas do grupo vêm da mais parecida com o cabeçalho', () => {
+    const r = reconhecerFornecedor(cadastro, '11.222.333/0007-01', 'BRAVA - Alfa Empreendimentos Farmaceuticos')
+    expect(r.alternativas[0].id).toBe('3')
+  })
+
+  it('só pelo nome, com a mesma empresa cadastrada duas vezes: fica a credenciada', () => {
+    const duplicada = [
+      ...cadastro,
+      { ...f('20', 'BETA QUIMICA FARMACEUTICA LTDA', '22.333.444/0001-00'), credenciado: true },
+    ]
+    const r = reconhecerFornecedor(duplicada, null, 'Beta Quimica e Farmaceutica Ltda')
+    expect(r).toMatchObject({ id: '20', motivo: 'nome' })
+    expect(r.alternativas.map((x) => x.id)).toEqual(['5'])
+  })
+
+  it('só pelo nome: abreviação conta e a marca a mais decide', () => {
+    const grupo = [
+      ...cadastro,
+      f('30', 'OMEGA - ALFA EMPREENDIMENTOS FARM. LTDA'),
+      f('31', 'ALFA EMPREENDIMENTOS FARMACEUTICOS LTDA'),
+    ]
+    expect(reconhecerFornecedor(grupo, null, 'Omega Brasil | Alfa Empreendimentos Farmaceuticos LTDA')).toMatchObject({
+      id: '30',
+      motivo: 'nome',
+    })
+  })
+
+  it('sigla de estado no endereço não vira nome de empresa', () => {
+    const comSigla = [...cadastro, f('40', 'SP FARMA LTDA'), f('41', 'VIA FARMA'), f('42', 'RJ FARMA')]
+    expect(reconhecerFornecedor(comSigla, null, 'Beta Quimica Farmaceutica Ltda — Campinas/SP')).toMatchObject({ id: '5' })
+    expect(reconhecerFornecedor(comSigla, null, 'Insumos Farmaceuticos — Campinas/SP')).toMatchObject({ id: '', motivo: null })
+  })
+
   it('não chuta quando só palavras comuns batem', () => {
     expect(reconhecerFornecedor(cadastro, null, 'Farmacia Exemplo - pedido de insumos farmaceuticos')).toMatchObject({ id: '', motivo: null })
   })
