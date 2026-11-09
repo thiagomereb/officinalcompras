@@ -23,12 +23,14 @@ const MAX_IMAGEM_BYTES = 5 * 1024 * 1024
 const RATE_LIMIT_RPM = 20
 const RATE_LIMIT_RPD = 400
 const USAGE_CHAVE = 'ler-orcamento'
+// Sinônimos por produto mandados à IA (o suficiente para reconhecer, sem inchar o prompt)
+const MAX_SINONIMOS = 10
 const OFFSET_BRASILIA_MS = 3 * 3600_000
 
 const INSTRUCOES = `Você lê orçamentos de fornecedores de insumos para uma farmácia de manipulação e liga cada item ao produto que a farmácia pediu.
 
 Você recebe:
-1. PRODUTOS PEDIDOS: a lista da farmácia, "código | nome" (o [x%] é o teor do produto em estoque).
+1. PRODUTOS PEDIDOS: a lista da farmácia, "código | nome | também: sinônimos" (o [x%] é o teor do produto em estoque; os sinônimos são outros nomes do mesmo produto, inclusive descrições de fornecedores já confirmadas pela farmácia — se a descrição do orçamento bater com um sinônimo, é esse produto).
 2. Uma página do ORÇAMENTO do fornecedor: em texto, linha a linha, com " | " separando as colunas (descrições longas podem continuar na linha de cima ou de baixo — junte-as), ou em imagem.
 
 Extraia TODOS os itens com preço desta página, um por linha da tabela. Se o mesmo produto aparecer em embalagens diferentes (ex.: 1 KG e 5 KG), devolva cada embalagem como um item separado.
@@ -195,7 +197,7 @@ Deno.serve(async (req) => {
 
     const { data: pedidos, error: erroPedidos } = await supabase
       .from('cotacao_propria_itens')
-      .select('codigo, nome, teor')
+      .select('codigo, nome, teor, insumo_id')
       .eq('cotacao_propria_id', cotacao_propria_id)
       .order('ordem')
     if (erroPedidos) throw new Error(erroPedidos.message)
@@ -204,8 +206,31 @@ Deno.serve(async (req) => {
     const bloqueio = await verificarRateLimit(supabase)
     if (bloqueio) return jsonResponse({ error: bloqueio }, 429, { 'Retry-After': '60' })
 
+    // Sinônimos do insumo de cada produto pedido (inclusive os aprendidos com
+    // as correções do comprador): é por eles que muita descrição de fornecedor bate
+    const insumos = [...new Set(pedidos.map((p) => p.insumo_id))]
+    const sinonimosPorInsumo = new Map<string, string[]>()
+    for (let i = 0; i < insumos.length; i += 100) {
+      const { data: sins, error: erroSins } = await supabase
+        .from('insumo_sinonimos')
+        .select('insumo_id, sinonimo')
+        .in('insumo_id', insumos.slice(i, i + 100))
+        // Os mais novos primeiro: os aprendidos com as correções entram antes do limite
+        .order('created_at', { ascending: false })
+      if (erroSins) throw new Error(erroSins.message)
+      for (const s of sins ?? []) {
+        const lista = sinonimosPorInsumo.get(s.insumo_id) ?? []
+        if (lista.length < MAX_SINONIMOS && s.sinonimo.length <= 80) lista.push(s.sinonimo)
+        sinonimosPorInsumo.set(s.insumo_id, lista)
+      }
+    }
+
     const lista = pedidos
-      .map((p) => `${p.codigo} | ${p.nome}${p.teor != null && Number(p.teor) !== 100 ? ` [${Number(p.teor)}%]` : ''}`)
+      .map((p) => {
+        const teor = p.teor != null && Number(p.teor) !== 100 ? ` [${Number(p.teor)}%]` : ''
+        const sins = sinonimosPorInsumo.get(p.insumo_id) ?? []
+        return `${p.codigo} | ${p.nome}${teor}${sins.length ? ` | também: ${sins.join('; ')}` : ''}`
+      })
       .join('\n')
     const cabecalhoPagina = `ORÇAMENTO — página ${Number(pagina) || 1} de ${Number(total_paginas) || 1}`
 

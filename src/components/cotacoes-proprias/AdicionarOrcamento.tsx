@@ -3,13 +3,14 @@
 import { useMemo, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { FileUp } from 'lucide-react'
+import { FileUp, Pencil } from 'lucide-react'
 import { enviarArquivoCotacao, removerArquivoCotacao, ACCEPT_ARQUIVO_COTACAO, LIMITE_ARQUIVO_BYTES } from '@/lib/supabase/upload'
 import { lerOrcamento } from '@/lib/orcamento-browser'
 import { conferirTotal, itemParaGravar, soDigitos, type OrcamentoLido } from '@/lib/orcamento'
 import { precoPorUnidadeBase } from '@/lib/unidades'
 import { LeituraPreco } from '@/components/ui/LeituraPreco'
 import type { salvarOrcamento } from '@/app/(dashboard)/cotacoes-proprias/orcamentos-actions'
+import { SeletorProdutoPedido, type ProdutoPedidoOpcao } from './SeletorProdutoPedido'
 
 type Fornecedor = { id: string; razao_social: string; nome_fantasia: string | null; cnpj: string | null; codigo: string | null }
 
@@ -30,28 +31,36 @@ function reconhecerFornecedor(fornecedores: Fornecedor[], cnpj: string | null): 
 interface Props {
   cotacaoPropriaId: string
   fornecedores: Fornecedor[]
-  // código → nome dos produtos pedidos, para mostrar o vínculo na prévia
-  pedidos: Record<string, string>
+  pedidos: ProdutoPedidoOpcao[]
   action: typeof salvarOrcamento
 }
 
+// O vínculo de cada item na prévia: o que a leitura sugeriu ou o que o comprador escolheu
+type Vinculo = { codigo: string | null; conferido: boolean }
+type Filtro = 'ligados' | 'fora' | 'todos'
+
 const moeda = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
-const AMOSTRA = 12
 
 export function AdicionarOrcamento({ cotacaoPropriaId, fornecedores, pedidos, action }: Props) {
   const router = useRouter()
   const [arquivo, setArquivo] = useState<File | null>(null)
   const [lido, setLido] = useState<(OrcamentoLido & { paginas: number }) | null>(null)
+  const [vinculos, setVinculos] = useState<Vinculo[]>([])
   const [fornecedorId, setFornecedorId] = useState('')
   const [candidatos, setCandidatos] = useState<Fornecedor[]>([])
+  const [filtro, setFiltro] = useState<Filtro>('todos')
+  const [editando, setEditando] = useState<number | null>(null)
   const [progresso, setProgresso] = useState<string | null>(null)
   const [erro, setErro] = useState<string | null>(null)
   const [salvando, startTransition] = useTransition()
+
+  const pedidoPorCodigo = useMemo(() => new Map(pedidos.map((p) => [p.codigo, p])), [pedidos])
 
   async function ler(f: File) {
     setArquivo(f)
     setLido(null)
     setErro(null)
+    setEditando(null)
     if (f.size > LIMITE_ARQUIVO_BYTES) {
       setErro(`Arquivo muito grande. O limite é ${LIMITE_ARQUIVO_BYTES / 1024 / 1024} MB.`)
       return
@@ -65,6 +74,8 @@ export function AdicionarOrcamento({ cotacaoPropriaId, fornecedores, pedidos, ac
       const reconhecido = reconhecerFornecedor(fornecedores, r.cabecalho.cnpj)
       setFornecedorId(reconhecido.id)
       setCandidatos(reconhecido.candidatos)
+      setVinculos(r.itens.map((i) => ({ codigo: i.codigo_pedido, conferido: false })))
+      setFiltro('todos')
       setLido(r)
     } catch (e) {
       setErro((e as Error).message)
@@ -73,16 +84,22 @@ export function AdicionarOrcamento({ cotacaoPropriaId, fornecedores, pedidos, ac
     }
   }
 
+  function vincular(indice: number, produto: ProdutoPedidoOpcao | null) {
+    setVinculos((v) => v.map((x, k) => (k === indice ? { codigo: produto?.codigo ?? null, conferido: true } : x)))
+    setEditando(null)
+  }
+
   const resumo = useMemo(() => {
     if (!lido) return null
-    const vinculados = lido.itens.filter((i) => i.codigo_pedido).length
+    const ligados = vinculos.filter((v) => v.codigo).length
     return {
-      vinculados,
-      fora: lido.itens.length - vinculados,
-      produtos: new Set(lido.itens.flatMap((i) => (i.codigo_pedido ? [i.codigo_pedido] : []))).size,
+      ligados,
+      fora: vinculos.length - ligados,
+      conferidos: vinculos.filter((v) => v.conferido).length,
+      produtos: new Set(vinculos.flatMap((v) => (v.codigo ? [v.codigo] : []))).size,
       total: conferirTotal(lido.itens, lido.cabecalho.total_documento),
     }
-  }, [lido])
+  }, [lido, vinculos])
 
   function salvar() {
     if (!arquivo || !lido) return
@@ -101,7 +118,7 @@ export function AdicionarOrcamento({ cotacaoPropriaId, fornecedores, pedidos, ac
           arquivoUrl: path,
           arquivoNome: arquivo.name,
           cabecalho: lido.cabecalho,
-          itens: lido.itens,
+          itens: lido.itens.map((i, k) => ({ ...i, codigo_pedido: vinculos[k].codigo, conferido: vinculos[k].conferido })),
         })
         if ('erro' in r) {
           await removerArquivoCotacao(path)
@@ -118,6 +135,9 @@ export function AdicionarOrcamento({ cotacaoPropriaId, fornecedores, pedidos, ac
 
   const lendo = progresso != null
   const cab = lido?.cabecalho
+  const linhas = (lido?.itens ?? [])
+    .map((item, indice) => ({ item, indice, vinculo: vinculos[indice] }))
+    .filter(({ vinculo }) => filtro === 'todos' || (filtro === 'ligados' ? !!vinculo?.codigo : !vinculo?.codigo))
 
   return (
     <div className="space-y-5">
@@ -220,43 +240,98 @@ export function AdicionarOrcamento({ cotacaoPropriaId, fornecedores, pedidos, ac
               </dl>
             </div>
 
-            <div className="flex flex-wrap gap-2 text-[12.5px]">
-              <span className="selo">{lido.itens.length} itens lidos</span>
-              <span className="selo selo-ok">
-                {resumo.vinculados} ligados a {resumo.produtos} produto(s) pedido(s)
-              </span>
-              {resumo.fora > 0 && <span className="selo">{resumo.fora} fora da cotação</span>}
-              {resumo.total.bate === true && (
-                <span className="selo selo-ok">soma bate com o total do documento ({moeda(cab.total_documento!)})</span>
-              )}
-            </div>
+            {resumo.total.bate === true && (
+              <p className="text-[12.5px] text-salvia">
+                A soma dos itens lidos bate com o total do documento ({moeda(cab.total_documento!)}).
+              </p>
+            )}
             {resumo.total.bate === false && (
               <p className="aviso aviso-atencao" role="status">
                 A soma dos itens lidos ({moeda(resumo.total.soma)}, ou {moeda(resumo.total.somaComImpostos)} com impostos) não bate
-                com o total do documento ({moeda(cab.total_documento!)}). Pode ter ficado item de fora: confira depois de salvar.
+                com o total do documento ({moeda(cab.total_documento!)}). Pode ter ficado item de fora.
               </p>
             )}
           </div>
 
-          <div className="overflow-x-auto border-t border-linha-2">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-linha-2 px-5 py-3">
+            <div className="flex flex-wrap items-center gap-1" role="tablist" aria-label="Itens do orçamento">
+              {(
+                [
+                  ['todos', 'Todos', lido.itens.length],
+                  ['ligados', 'Ligados a produtos pedidos', resumo.ligados],
+                  ['fora', 'Fora da cotação', resumo.fora],
+                ] as const
+              ).map(([id, label, n]) => (
+                <button
+                  key={id}
+                  role="tab"
+                  aria-selected={filtro === id}
+                  onClick={() => setFiltro(id)}
+                  className={`btn btn-sm ${filtro === id ? 'btn-secundario' : 'btn-fantasma'}`}
+                >
+                  {label} <span className="leitura text-ardosia">{n}</span>
+                </button>
+              ))}
+            </div>
+            <p className="text-[12.5px] text-ardosia">
+              Corrija pelo lápis o que a leitura ligou errado ou deixou de fora; o que você corrigir vira sinônimo do insumo.
+            </p>
+          </div>
+
+          <div className="max-h-[560px] overflow-auto border-t border-linha-2">
             <table className="tabela tabela-compacta whitespace-nowrap">
-              <thead>
+              <thead className="sticky top-0 z-10 bg-papel">
                 <tr>
                   <th>Item do fornecedor</th>
+                  <th>Produto pedido</th>
                   <th>Embalagem</th>
                   <th className="num">Total</th>
                   <th className="num">Por unidade base</th>
-                  <th>Produto pedido</th>
                 </tr>
               </thead>
               <tbody>
-                {lido.itens.slice(0, AMOSTRA).map((i, k) => {
+                {linhas.map(({ item: i, indice, vinculo }) => {
                   const g = itemParaGravar(i)
                   const base = precoPorUnidadeBase(g.preco_unitario, g.quantidade_minima, g.unidade)
+                  const pedido = vinculo?.codigo ? pedidoPorCodigo.get(vinculo.codigo) : undefined
                   return (
-                    <tr key={k}>
-                      <td className="max-w-[260px] truncate" title={i.descricao}>
-                        {i.descricao}
+                    <tr key={indice} className="group/linha align-top">
+                      <td className="max-w-[300px]">
+                        <div className="truncate" title={i.descricao}>
+                          {i.descricao}
+                        </div>
+                        {i.obs && !vinculo?.conferido && (
+                          <div className={`whitespace-normal text-[11.5px] ${i.codigo_pedido ? 'text-oxido' : 'text-ardosia'}`}>{i.obs}</div>
+                        )}
+                      </td>
+                      <td className="min-w-[260px]">
+                        {editando === indice ? (
+                          <SeletorProdutoPedido
+                            pedidos={pedidos}
+                            onEscolher={(p) => vincular(indice, p)}
+                            onCancelar={() => setEditando(null)}
+                          />
+                        ) : (
+                          <div className="flex items-center gap-1">
+                            {pedido ? (
+                              <span className="truncate" title={`${pedido.codigo} · ${pedido.nome}`}>
+                                {pedido.nome}
+                              </span>
+                            ) : (
+                              <span className="text-ardosia-2">fora da cotação</span>
+                            )}
+                            {vinculo?.conferido && <span className="selo selo-ok h-5 shrink-0 px-1.5 text-[11px]">conferido</span>}
+                            <button
+                              type="button"
+                              onClick={() => setEditando(indice)}
+                              className="btn btn-fantasma btn-icone btn-sm h-6 w-6 shrink-0 opacity-40 group-hover/linha:opacity-100 focus-visible:opacity-100"
+                              title={pedido ? 'Trocar o produto pedido' : 'Ligar a um produto pedido'}
+                              aria-label={`${pedido ? 'Trocar' : 'Escolher'} o produto pedido de ${i.descricao}`}
+                            >
+                              <Pencil size={13} />
+                            </button>
+                          </div>
+                        )}
                       </td>
                       <td className="text-ardosia">
                         {i.quantidade_embalagens !== 1 && `${i.quantidade_embalagens}× `}
@@ -266,18 +341,12 @@ export function AdicionarOrcamento({ cotacaoPropriaId, fornecedores, pedidos, ac
                       <td className="num">
                         <LeituraPreco valor={base.valor} base={base.base} />
                       </td>
-                      <td className="max-w-[260px] truncate" title={i.obs ?? undefined}>
-                        {i.codigo_pedido ? pedidos[i.codigo_pedido] : <span className="text-ardosia-2">fora da cotação</span>}
-                      </td>
                     </tr>
                   )
                 })}
               </tbody>
             </table>
           </div>
-          {lido.itens.length > AMOSTRA && (
-            <p className="border-t border-linha-2 px-5 py-2.5 text-[12.5px] text-ardosia">e mais {lido.itens.length - AMOSTRA} item(ns)</p>
-          )}
 
           <div className="flex flex-wrap items-center gap-3 border-t border-linha-2 px-5 py-4">
             <button onClick={salvar} disabled={salvando} className="btn btn-primario">
@@ -285,7 +354,9 @@ export function AdicionarOrcamento({ cotacaoPropriaId, fornecedores, pedidos, ac
               {salvando ? 'Salvando…' : 'Salvar orçamento'}
             </button>
             <p className="text-[12.5px] text-ardosia">
-              Os vínculos ficam como sugestão da leitura até você conferir no orçamento.
+              {resumo.ligados} item(ns) ligados a {resumo.produtos} produto(s) pedido(s)
+              {resumo.conferidos > 0 && `, ${resumo.conferidos} conferido(s) por você`}. O resto fica como sugestão da leitura,
+              para conferir no orçamento.
             </p>
           </div>
         </section>

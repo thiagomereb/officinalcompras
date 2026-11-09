@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
-import { buscarTodos } from '@/lib/supabase/consultas'
+import { carregarPedidosComSinonimos } from '@/lib/pedidos'
 import { Cabecalho } from '@/components/ui/Cabecalho'
 import { AdicionarOrcamento } from '@/components/cotacoes-proprias/AdicionarOrcamento'
 import { salvarOrcamento } from '../../../orcamentos-actions'
@@ -12,9 +12,7 @@ export default async function NovoOrcamentoPage({ params }: { params: Promise<{ 
   const [{ data: cotacao }, { data: fornecedores }, pedidos] = await Promise.all([
     supabase.from('cotacoes_proprias').select('numero').eq('id', id).single(),
     supabase.from('fornecedores').select('id, razao_social, nome_fantasia, cnpj, codigo').eq('ativo', true).order('razao_social'),
-    buscarTodos((de, ate) =>
-      supabase.from('cotacao_propria_itens').select('codigo, nome').eq('cotacao_propria_id', id).order('ordem').range(de, ate),
-    ),
+    carregarPedidosComSinonimos(supabase, id),
   ])
   if (!cotacao) notFound()
 
@@ -29,7 +27,7 @@ export default async function NovoOrcamentoPage({ params }: { params: Promise<{ 
         <AdicionarOrcamento
           cotacaoPropriaId={id}
           fornecedores={fornecedores ?? []}
-          pedidos={Object.fromEntries(pedidos.map((p) => [p.codigo, p.nome]))}
+          pedidos={pedidos.map(({ id: pedidoId, codigo, nome, sinonimos }) => ({ id: pedidoId, codigo, nome, sinonimos }))}
           action={salvarOrcamento}
         />
       </div>

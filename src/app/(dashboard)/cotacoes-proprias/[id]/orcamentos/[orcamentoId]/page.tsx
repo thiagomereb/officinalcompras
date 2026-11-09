@@ -3,6 +3,7 @@ import { ChevronDown, Paperclip, AlertTriangle } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { getArquivoSignedUrl } from '@/lib/supabase/storage'
 import { buscarTodos } from '@/lib/supabase/consultas'
+import { carregarPedidosComSinonimos } from '@/lib/pedidos'
 import { Cabecalho } from '@/components/ui/Cabecalho'
 import { CotacaoForm } from '@/components/cotacoes/CotacaoForm'
 import { ItensOrcamento, type ItemOrcamento } from '@/components/cotacoes-proprias/ItensOrcamento'
@@ -38,9 +39,7 @@ export default async function OrcamentoPage({ params }: { params: Promise<{ id: 
         .order('id')
         .range(de, ate),
     ),
-    buscarTodos((de, ate) =>
-      supabase.from('cotacao_propria_itens').select('id, codigo, nome').eq('cotacao_propria_id', id).order('ordem').range(de, ate),
-    ),
+    carregarPedidosComSinonimos(supabase, id),
     supabase.from('fornecedores').select('*').order('razao_social'),
     getArquivoSignedUrl(supabase, orcamento.arquivo_url),
   ])

@@ -5,8 +5,7 @@ import { Check, Pencil, Search } from 'lucide-react'
 import { precoPorUnidadeBase } from '@/lib/unidades'
 import { LeituraPreco } from '@/components/ui/LeituraPreco'
 import type { alterarVinculoOrcamento, confirmarSugestoes } from '@/app/(dashboard)/cotacoes-proprias/orcamentos-actions'
-
-export type ProdutoPedidoOpcao = { id: string; codigo: string; nome: string }
+import { SeletorProdutoPedido, type ProdutoPedidoOpcao } from './SeletorProdutoPedido'
 
 export type ItemOrcamento = {
   id: string
@@ -36,68 +35,6 @@ type Filtro = 'todos' | 'conferir' | 'fora'
 
 const moeda = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 const data = (d: string) => new Date(d + 'T12:00:00').toLocaleDateString('pt-BR')
-const MAX_OPCOES = 8
-
-function SeletorProdutoPedido({
-  pedidos,
-  pendente,
-  onEscolher,
-  onCancelar,
-}: {
-  pedidos: ProdutoPedidoOpcao[]
-  pendente: boolean
-  onEscolher: (id: string | null) => void
-  onCancelar: () => void
-}) {
-  const [termo, setTermo] = useState('')
-  const t = termo.trim().toLowerCase()
-  const opcoes = (t ? pedidos.filter((p) => p.nome.toLowerCase().includes(t) || p.codigo.includes(t)) : pedidos).slice(0, MAX_OPCOES)
-
-  return (
-    <div className="max-w-xl space-y-2 py-1 whitespace-normal">
-      <div className="relative">
-        <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ardosia-2" />
-        <input
-          autoFocus
-          value={termo}
-          onChange={(e) => setTermo(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Escape') onCancelar()
-            if (e.key === 'Enter' && opcoes[0]) onEscolher(opcoes[0].id)
-          }}
-          placeholder="Buscar entre os produtos pedidos…"
-          aria-label="Buscar produto pedido"
-          disabled={pendente}
-          className="campo campo-sm pl-8"
-        />
-      </div>
-      <ul className="overflow-hidden rounded-lg border border-linha bg-papel">
-        {opcoes.map((p) => (
-          <li key={p.id}>
-            <button
-              onClick={() => onEscolher(p.id)}
-              disabled={pendente}
-              className="flex w-full items-baseline gap-3 px-3 py-1.5 text-left text-[13px] hover:bg-nevoa"
-            >
-              <span className="leitura text-[12px] text-ardosia">{p.codigo}</span>
-              {p.nome}
-            </button>
-          </li>
-        ))}
-        {opcoes.length === 0 && <li className="px-3 py-2 text-[13px] text-ardosia">Nenhum produto pedido com esse nome.</li>}
-      </ul>
-      <div className="flex items-center gap-1">
-        <button onClick={() => onEscolher(null)} disabled={pendente} className="btn btn-fantasma btn-sm">
-          Não foi pedido
-        </button>
-        <button onClick={onCancelar} disabled={pendente} className="btn btn-fantasma btn-sm">
-          Cancelar
-        </button>
-        {pendente && <span className="girador text-ardosia" aria-label="Salvando" />}
-      </div>
-    </div>
-  )
-}
 
 export function ItensOrcamento({ itens, pedidos, orcamentoId, cotacaoPropriaId, alterar, confirmar }: Props) {
   const [filtro, setFiltro] = useState<Filtro>(() => (itens.some((i) => i.origem === 'ia') ? 'conferir' : 'todos'))
@@ -222,7 +159,7 @@ export function ItensOrcamento({ itens, pedidos, orcamentoId, cotacaoPropriaId, 
                         <SeletorProdutoPedido
                           pedidos={pedidos}
                           pendente={pendente}
-                          onEscolher={(id) => escolher(i.id, id)}
+                          onEscolher={(p) => escolher(i.id, p?.id ?? null)}
                           onCancelar={() => setEditando(null)}
                         />
                       ) : (

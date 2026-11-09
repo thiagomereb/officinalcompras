@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { removerArquivos } from '@/lib/supabase/storage'
 import { emLotes } from '@/lib/supabase/consultas'
-import { chaveDescricao, itemParaGravar, itemValido, soDigitos, type ItemOrcamentoLido } from '@/lib/orcamento'
+import { chaveDescricao, itemParaGravar, itemValido, soDigitos } from '@/lib/orcamento'
 import type { Falha } from '@/lib/acoes'
 import type { Json } from '@/types/database'
 
@@ -51,7 +51,11 @@ export async function salvarOrcamento(payload: unknown): Promise<{ id: string } 
 
   if (!Array.isArray(p.itens) || p.itens.length === 0) return { erro: 'Nenhum item lido no orçamento.' }
   if (p.itens.length > LIMITE_ITENS) return { erro: `O orçamento passa de ${LIMITE_ITENS} itens.` }
-  const itens = p.itens.map(itemValido).filter((i): i is ItemOrcamentoLido => i != null)
+  // conferido: o comprador escolheu o produto pedido na prévia
+  const itens = p.itens.flatMap((raw) => {
+    const item = itemValido(raw)
+    return item ? [{ ...item, conferido: (raw as Record<string, unknown>)?.conferido === true }] : []
+  })
   if (itens.length === 0) return { erro: 'Nenhum item com preço válido no orçamento.' }
 
   const c = (p.cabecalho ?? {}) as Record<string, unknown>
@@ -96,13 +100,13 @@ export async function salvarOrcamento(payload: unknown): Promise<{ id: string } 
     .single()
   if (error || !orcamento) return { erro: error?.message ?? 'Não foi possível gravar o orçamento.' }
 
+  // Quem decide o vínculo, nesta ordem: o comprador na prévia; uma descrição
+  // que ele já confirmou antes (sinônimo); a sugestão da leitura
   const linhas = itens.map((i) => {
-    const porSinonimo = insumoPorDescricao.get(chaveDescricao(i.descricao))
-    const pedido = porSinonimo
-      ? pedidoPorInsumo.get(porSinonimo)
-      : i.codigo_pedido
-        ? pedidoPorCodigo.get(i.codigo_pedido)
-        : undefined
+    const porSinonimo = i.conferido ? undefined : insumoPorDescricao.get(chaveDescricao(i.descricao))
+    const pedidoSinonimo = porSinonimo ? pedidoPorInsumo.get(porSinonimo) : undefined
+    const pedido = pedidoSinonimo ?? (i.codigo_pedido ? pedidoPorCodigo.get(i.codigo_pedido) : undefined)
+    const origem = i.conferido ? 'comprador' : pedidoSinonimo ? 'sinonimo' : 'ia'
     return {
       cotacao_id: orcamento.id,
       descricao_original: i.descricao,
@@ -113,8 +117,8 @@ export async function salvarOrcamento(payload: unknown): Promise<{ id: string } 
       st: i.st ?? 0,
       cotacao_propria_item_id: pedido?.id ?? null,
       insumo_id: pedido?.insumo_id ?? null,
-      vinculo_origem: porSinonimo && pedido ? 'sinonimo' : 'ia',
-      vinculo_obs: porSinonimo && pedido ? null : i.obs,
+      vinculo_origem: origem,
+      vinculo_obs: origem === 'ia' ? i.obs : null,
     }
   })
 
@@ -123,6 +127,12 @@ export async function salvarOrcamento(payload: unknown): Promise<{ id: string } 
     await supabase.from('cotacoes').delete().eq('id', orcamento.id)
     return { erro: erroItens.message }
   }
+
+  // O que o comprador ligou na prévia vira sinônimo, como no orçamento salvo
+  await aprender(
+    supabase,
+    linhas.flatMap((l) => (l.vinculo_origem === 'comprador' && l.insumo_id ? [{ descricao: l.descricao_original, insumo_id: l.insumo_id }] : [])),
+  )
 
   // Fornecedor escolhido à mão e sem CNPJ no cadastro guarda o do orçamento,
   // para ser reconhecido sozinho no próximo

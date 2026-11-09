@@ -132,5 +132,7 @@ export function conferirTotal(itens: ItemOrcamentoLido[], total: number | null):
 
 export const soDigitos = (s: string | null | undefined) => (s ?? '').replace(/\D/g, '')
 
-// Chave de comparação de uma descrição com sinônimos já confirmados
-export const chaveDescricao = (s: string) => s.trim().replace(/\s+/g, ' ').toUpperCase()
+// Chave de comparação de uma descrição com sinônimos já confirmados (sem
+// diferenciar acento, maiúscula nem espaços)
+export const chaveDescricao = (s: string) =>
+  s.normalize('NFD').replace(/[̀-ͯ]/g, '').trim().replace(/\s+/g, ' ').toUpperCase()
