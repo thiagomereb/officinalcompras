@@ -47,3 +47,7 @@ next-env.d.ts
 .netlify
 deno.lock
 tailwindcss-*.log
+
+# Dados das empresas (CNPJ, CPF) importados do sistema da farmácia: ficam no
+# projeto, nunca no git (o repositório é público)
+/dados/
