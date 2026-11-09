@@ -15,6 +15,8 @@ export type ProdutoPedido = {
   insumo_id: string
   // O insumo entrou no cadastro com esta importação
   novo_no_cadastro: boolean
+  // Em quantos orçamentos o produto aparece
+  ofertas: number
 }
 
 const quantidadeBR = (q: number) => q.toLocaleString('pt-BR', { maximumFractionDigits: 4 })
@@ -62,6 +64,7 @@ export function ProdutosCotacaoPropria({ produtos }: { produtos: ProdutoPedido[]
                 <th>Produto</th>
                 <th className="num">Teor</th>
                 <th className="num">Quantidade</th>
+                <th className="num">Ofertas</th>
                 <th>EAN</th>
               </tr>
             </thead>
@@ -83,6 +86,7 @@ export function ProdutosCotacaoPropria({ produtos }: { produtos: ProdutoPedido[]
                   <td className="num leitura">
                     {quantidadeBR(p.quantidade)} {p.unidade}
                   </td>
+                  <td className={`num leitura ${p.ofertas ? '' : 'text-ardosia-2'}`}>{p.ofertas || '—'}</td>
                   <td className="leitura text-[12px] text-ardosia">{p.ean ?? 'sem GTIN'}</td>
                 </tr>
               ))}

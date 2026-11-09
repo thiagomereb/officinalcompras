@@ -243,9 +243,9 @@ export default async function DashboardPage() {
         titulo="Painel"
         descricao={dataCabecalho}
         acoes={
-          <Link href="/cotacoes/nova" className="btn btn-primario">
+          <Link href="/cotacoes-proprias/nova" className="btn btn-primario">
             <Plus size={16} />
-            Nova cotação
+            Importar cotação
           </Link>
         }
       />

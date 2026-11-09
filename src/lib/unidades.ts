@@ -12,6 +12,8 @@ const SINONIMOS_UNIDADE: Record<string, string> = {
   ui: 'UI', un: 'un', und: 'un', unid: 'un', unidade: 'un', unidades: 'un',
   caps: 'cáps', cáps: 'cáps', capsula: 'cáps', cápsula: 'cáps', capsulas: 'cáps', cápsulas: 'cáps',
   comp: 'comp', comprimido: 'comp', comprimidos: 'comp',
+  // Cápsulas vazias são vendidas por milheiro ("5 MIL", "10,000 MI")
+  mil: 'mil', mi: 'mil', milheiro: 'mil',
 }
 
 export function normalizarUnidade(u: string | null | undefined): string | null {
@@ -32,6 +34,7 @@ const PARA_BASE: Record<string, { base: string; fator: number }> = {
   mL: { base: 'mL', fator: 1 },
   L: { base: 'mL', fator: 1000 },
   kL: { base: 'mL', fator: 1_000_000 },
+  mil: { base: 'un', fator: 1000 },
 }
 
 export type PrecoBase = {

@@ -129,8 +129,9 @@ export function lerCotacaoPropria(linhas: string[]): LeituraCotacaoPropria {
 type PedacoTexto = { str: string; x: number; y: number }
 
 // O pdfjs devolve o texto em pedaços soltos com posição; uma linha do relatório
-// é o conjunto de pedaços na mesma altura, lidos da esquerda para a direita
-export function linhasDaPagina(pedacos: PedacoTexto[]): string[] {
+// é o conjunto de pedaços na mesma altura, lidos da esquerda para a direita.
+// Com separador " | ", as colunas ficam visíveis para quem lê (a IA, no orçamento).
+export function linhasDaPagina(pedacos: PedacoTexto[], separador = ' '): string[] {
   const linhas: { y: number; pedacos: PedacoTexto[] }[] = []
   for (const p of pedacos) {
     if (!p.str.trim()) continue
@@ -143,9 +144,8 @@ export function linhasDaPagina(pedacos: PedacoTexto[]): string[] {
     .map((l) =>
       l.pedacos
         .sort((a, b) => a.x - b.x)
-        .map((p) => p.str.trim())
-        .join(' ')
-        .replace(/\s+/g, ' '),
+        .map((p) => p.str.trim().replace(/\s+/g, ' '))
+        .join(separador),
     )
 }
 

@@ -75,9 +75,15 @@ export type Database = {
           st: number | null
           unidade: string | null
           validade: string | null
+          cotacao_propria_item_id: string | null
+          vinculo_obs: string | null
+          vinculo_origem: string | null
         }
         Insert: {
           cotacao_id: string
+          cotacao_propria_item_id?: string | null
+          vinculo_obs?: string | null
+          vinculo_origem?: string | null
           created_at?: string | null
           descricao_original: string
           id?: string
@@ -94,6 +100,9 @@ export type Database = {
         }
         Update: {
           cotacao_id?: string
+          cotacao_propria_item_id?: string | null
+          vinculo_obs?: string | null
+          vinculo_origem?: string | null
           created_at?: string | null
           descricao_original?: string
           id?: string
@@ -121,6 +130,13 @@ export type Database = {
             columns: ["insumo_id"]
             isOneToOne: false
             referencedRelation: "insumos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cotacao_itens_cotacao_propria_item_id_fkey"
+            columns: ["cotacao_propria_item_id"]
+            isOneToOne: false
+            referencedRelation: "cotacao_propria_itens"
             referencedColumns: ["id"]
           },
         ]
@@ -198,8 +214,18 @@ export type Database = {
           prazo_pagamento_dias: number | null
           status: string
           validade_cotacao: string | null
+          cotacao_propria_id: string
+          numero_orcamento: string | null
+          validade_texto: string | null
+          frete_tipo: string | null
+          total_documento: number | null
         }
         Insert: {
+          cotacao_propria_id: string
+          numero_orcamento?: string | null
+          validade_texto?: string | null
+          frete_tipo?: string | null
+          total_documento?: number | null
           arquivo_nome?: string | null
           arquivo_url?: string | null
           created_at?: string | null
@@ -216,6 +242,11 @@ export type Database = {
           validade_cotacao?: string | null
         }
         Update: {
+          cotacao_propria_id?: string
+          numero_orcamento?: string | null
+          validade_texto?: string | null
+          frete_tipo?: string | null
+          total_documento?: number | null
           arquivo_nome?: string | null
           arquivo_url?: string | null
           created_at?: string | null
@@ -237,6 +268,13 @@ export type Database = {
             columns: ["fornecedor_id"]
             isOneToOne: false
             referencedRelation: "fornecedores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cotacoes_cotacao_propria_id_fkey"
+            columns: ["cotacao_propria_id"]
+            isOneToOne: false
+            referencedRelation: "cotacoes_proprias"
             referencedColumns: ["id"]
           },
         ]
@@ -597,6 +635,7 @@ export type Database = {
       }
     }
     Functions: {
+      aprender_sinonimos: { Args: { p_pares: Json }; Returns: number }
       aprovar_mapa: {
         Args: {
           p_comparacao: Json

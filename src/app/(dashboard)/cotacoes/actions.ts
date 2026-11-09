@@ -1,7 +1,6 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import type { ItemExtraido, PreparoExtracao } from '@/lib/ocr'
 import { extrairItensExcel } from '@/lib/excel'
@@ -162,36 +161,6 @@ async function gravarItens(
   return itens.length
 }
 
-export async function criarCotacao(formData: FormData): Promise<Falha | void> {
-  const supabase = await createClient()
-
-  const condicoes = condicoesDoForm(formData)
-  if ('erro' in condicoes) return condicoes
-
-  // arquivo_url guarda o path do objeto no storage (bucket privado); o acesso
-  // real é sempre via signed URL gerada sob demanda em getArquivoSignedUrl.
-  // O upload em si já foi feito pelo navegador (enviarArquivoCotacao).
-  const arquivo_url = textoOuNulo(formData.get('arquivo_path'))
-  const arquivo_nome = textoOuNulo(formData.get('arquivo_nome'))
-  if (arquivo_url && !PATH_ARQUIVO.test(arquivo_url)) return { erro: 'Arquivo enviado inválido.' }
-
-  const { data: cotacao, error } = await supabase
-    .from('cotacoes')
-    .insert({
-      ...condicoes,
-      arquivo_url,
-      arquivo_nome: arquivo_url ? arquivo_nome : null,
-      status: 'processando',
-    })
-    .select('id')
-    .single()
-
-  if (error) return { erro: error.message }
-
-  revalidatePath('/cotacoes')
-  redirect(`/cotacoes/${cotacao.id}`)
-}
-
 export async function atualizarCotacao(id: string, formData: FormData): Promise<Falha | void> {
   const supabase = await createClient()
 
@@ -203,6 +172,7 @@ export async function atualizarCotacao(id: string, formData: FormData): Promise<
 
   revalidatePath('/cotacoes')
   revalidatePath(`/cotacoes/${id}`)
+  revalidatePath('/cotacoes-proprias', 'layout')
   revalidatePath('/dashboard')
 }
 
@@ -469,85 +439,3 @@ export async function salvarItensExtraidos(
   return typeof count === 'number' ? { count } : count
 }
 
-export async function lancarPrecos(payload: {
-  fornecedor_id: string
-  data_cotacao: string
-  validade_cotacao?: string | null
-  prazo_entrega_dias?: number | null
-  prazo_pagamento_dias?: number | null
-  items: {
-    insumo_id: string
-    preco_unitario: number
-    quantidade_embalagem: number | null
-    unidade: string | null
-  }[]
-}): Promise<Falha | void> {
-  // Server Actions são endpoints públicos: o payload pode não ter o formato do tipo
-  const fornecedor_id = textoOuNulo(payload?.fornecedor_id)
-  const data_cotacao = textoOuNulo(payload?.data_cotacao)
-  if (!fornecedor_id) return { erro: 'Selecione um fornecedor.' }
-  if (!data_cotacao) return { erro: 'Informe a data da cotação.' }
-
-  const items = (Array.isArray(payload.items) ? payload.items : []).flatMap((item) => {
-    const insumo_id = textoOuNulo(item?.insumo_id)
-    const preco = numeroOuNulo(item?.preco_unitario)
-    if (!insumo_id || preco === null || preco <= 0) return []
-    return [{
-      insumo_id,
-      preco_unitario: preco,
-      quantidade_embalagem: numeroOuNulo(item.quantidade_embalagem),
-      unidade: textoOuNulo(item.unidade),
-    }]
-  })
-  if (items.length === 0) return { erro: 'Adicione pelo menos um insumo com preço maior que zero.' }
-
-  const prazos = [numeroOuNulo(payload.prazo_entrega_dias), numeroOuNulo(payload.prazo_pagamento_dias)]
-  if (prazos.some((n) => n != null && (n < 0 || !Number.isInteger(n)))) {
-    return { erro: 'Prazos devem ser em dias inteiros, sem valores negativos.' }
-  }
-
-  const supabase = await createClient()
-
-  const { data: cotacao, error: cotacaoError } = await supabase
-    .from('cotacoes')
-    .insert({
-      fornecedor_id,
-      data_cotacao,
-      validade_cotacao: textoOuNulo(payload.validade_cotacao),
-      prazo_entrega_dias: prazos[0],
-      prazo_pagamento_dias: prazos[1],
-      status: 'processado',
-    })
-    .select('id')
-    .single()
-
-  if (cotacaoError) return { erro: cotacaoError.message }
-
-  const { data: insumosData } = await supabase
-    .from('insumos')
-    .select('id, nome_padrao')
-    .in('id', items.map((i) => i.insumo_id))
-
-  const nomeMap = new Map(insumosData?.map((i) => [i.id, i.nome_padrao]) ?? [])
-
-  const { error: itemsError } = await supabase.from('cotacao_itens').insert(
-    items.map((item) => ({
-      cotacao_id: cotacao.id,
-      insumo_id: item.insumo_id,
-      descricao_original: nomeMap.get(item.insumo_id) ?? 'Insumo',
-      preco_unitario: item.preco_unitario,
-      quantidade_minima: item.quantidade_embalagem,
-      unidade: normalizarUnidade(item.unidade),
-    })),
-  )
-
-  if (itemsError) {
-    // Sem itens a cotação recém-criada não serve para nada; desfaz para não
-    // deixar uma cotação vazia marcada como processada.
-    await supabase.from('cotacoes').delete().eq('id', cotacao.id)
-    return { erro: itemsError.message }
-  }
-
-  revalidatePath('/cotacoes')
-  revalidatePath('/dashboard')
-}

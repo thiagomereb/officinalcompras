@@ -60,13 +60,13 @@ export function ComparativoTable({ rows }: { rows: ComparativoRow[] }) {
           titulo={rows.length === 0 ? 'Nenhuma cotação vigente' : 'Nada encontrado'}
           texto={
             rows.length === 0
-              ? 'Lance uma cotação e vincule os itens aos insumos para ver a comparação aqui.'
+              ? 'Importe uma cotação própria e adicione os orçamentos dos fornecedores para ver a comparação aqui.'
               : `Nenhum insumo ou fornecedor corresponde a “${search.trim()}”.`
           }
           acao={
             rows.length === 0 && (
-              <Link href="/cotacoes/nova" className="btn btn-secundario btn-sm">
-                Nova cotação
+              <Link href="/cotacoes-proprias/nova" className="btn btn-secundario btn-sm">
+                Importar cotação
               </Link>
             )
           }
@@ -123,8 +123,8 @@ export function ComparativoTable({ rows }: { rows: ComparativoRow[] }) {
                     <Link
                       href={`/cotacoes/${row.melhor_cotacao_id}`}
                       className="btn btn-fantasma btn-icone btn-sm"
-                      aria-label={`Abrir a cotação de ${row.melhor_fornecedor}`}
-                      title="Abrir cotação"
+                      aria-label={`Abrir o orçamento de ${row.melhor_fornecedor}`}
+                      title="Abrir orçamento"
                     >
                       <ArrowUpRight size={15} />
                     </Link>
