@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { normalizarUnidade, precoPorUnidadeBase } from './unidades'
+import { normalizarUnidade, precoPorUnidadeBase, quantidadeEmBase } from './unidades'
 
 describe('normalizarUnidade', () => {
   it('padroniza variações comuns', () => {
@@ -32,5 +32,14 @@ describe('precoPorUnidadeBase', () => {
 
   it('sem tamanho de embalagem assume preço por unidade', () => {
     expect(precoPorUnidadeBase(12, null, 'un')).toEqual({ valor: 12, base: 'un' })
+  })
+})
+
+describe('quantidadeEmBase', () => {
+  it('converte a quantidade pedida para a base da grandeza', () => {
+    expect(quantidadeEmBase(2.5, 'kg')).toEqual({ valor: 2500, base: 'g' })
+    expect(quantidadeEmBase(12.092, 'G')).toEqual({ valor: 12.092, base: 'g' })
+    expect(quantidadeEmBase(5, 'mil')).toEqual({ valor: 5000, base: 'un' })
+    expect(quantidadeEmBase(3, 'frasco')).toEqual({ valor: 3, base: 'frasco' })
   })
 })

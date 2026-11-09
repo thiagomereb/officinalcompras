@@ -6,7 +6,12 @@ import { getArquivoSignedUrl } from '@/lib/supabase/storage'
 import { buscarTodos } from '@/lib/supabase/consultas'
 import { Cabecalho } from '@/components/ui/Cabecalho'
 import { Vazio } from '@/components/ui/Vazio'
-import { ProdutosCotacaoPropria, type ProdutoPedido } from '@/components/cotacoes-proprias/ProdutosCotacaoPropria'
+import {
+  ProdutosCotacaoPropria,
+  type FornecedorDaCotacao,
+  type ProdutoPedido,
+} from '@/components/cotacoes-proprias/ProdutosCotacaoPropria'
+import type { OfertaProduto } from '@/lib/ofertas-cotacao'
 import { ExcluirCotacaoPropriaButton } from './ExcluirCotacaoPropriaButton'
 import { excluirCotacaoPropria } from '../actions'
 
@@ -34,25 +39,54 @@ export default async function CotacaoPropriaPage({ params }: { params: Promise<{
     getArquivoSignedUrl(supabase, cotacao.arquivo_url),
     supabase
       .from('cotacoes')
-      .select('id, numero_orcamento, data_cotacao, total_documento, fornecedores(razao_social, nome_fantasia), cotacao_itens(cotacao_propria_item_id, vinculo_origem)')
+      .select('id, fornecedor_id, numero_orcamento, data_cotacao, total_documento, fornecedores(razao_social, nome_fantasia), cotacao_itens(cotacao_propria_item_id, vinculo_origem)')
       .eq('cotacao_propria_id', id)
       .order('created_at'),
   ])
 
-  // Quantos orçamentos trazem cada produto pedido
-  const ofertasPorPedido = new Map<string, Set<string>>()
+  const nomeFornecedor = (f: unknown) => {
+    const x = f as { razao_social: string; nome_fantasia: string | null } | null
+    return x?.nome_fantasia ?? x?.razao_social ?? '—'
+  }
+  const orcamentoPorId = new Map((orcamentos ?? []).map((o) => [o.id, o]))
+
+  // Cada item de orçamento ligado a um produto pedido é uma oferta
+  const itensOfertados = orcamentoPorId.size
+    ? await buscarTodos((de, ate) =>
+        supabase
+          .from('cotacao_itens')
+          .select('id, cotacao_id, cotacao_propria_item_id, preco_unitario, quantidade_minima, quantidade, unidade, validade, vinculo_origem')
+          .in('cotacao_id', [...orcamentoPorId.keys()])
+          .not('cotacao_propria_item_id', 'is', null)
+          .order('id')
+          .range(de, ate),
+      )
+    : []
+  const ofertas: OfertaProduto[] = itensOfertados.map((i) => {
+    const o = orcamentoPorId.get(i.cotacao_id)!
+    return {
+      itemId: i.id,
+      pedidoId: i.cotacao_propria_item_id!,
+      orcamentoId: i.cotacao_id,
+      fornecedorId: o.fornecedor_id,
+      fornecedor: nomeFornecedor(o.fornecedores),
+      precoEmbalagem: i.preco_unitario,
+      embalagem: i.quantidade_minima,
+      unidade: i.unidade,
+      embalagens: i.quantidade,
+      validade: i.validade,
+      aConferir: i.vinculo_origem === 'ia',
+    }
+  })
+  const fornecedoresDaCotacao: FornecedorDaCotacao[] = [
+    ...new Map((orcamentos ?? []).map((o) => [o.fornecedor_id, { id: o.fornecedor_id, nome: nomeFornecedor(o.fornecedores) }])).values(),
+  ].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
+
   const linhasOrcamento = (orcamentos ?? []).map((o) => {
     const itensOrc = (o.cotacao_itens ?? []) as { cotacao_propria_item_id: string | null; vinculo_origem: string | null }[]
-    for (const i of itensOrc) {
-      if (!i.cotacao_propria_item_id) continue
-      const s = ofertasPorPedido.get(i.cotacao_propria_item_id) ?? new Set<string>()
-      s.add(o.id)
-      ofertasPorPedido.set(i.cotacao_propria_item_id, s)
-    }
-    const f = o.fornecedores as { razao_social: string; nome_fantasia: string | null } | null
     return {
       id: o.id,
-      fornecedor: f?.nome_fantasia ?? f?.razao_social ?? '—',
+      fornecedor: nomeFornecedor(o.fornecedores),
       numero: o.numero_orcamento,
       data: o.data_cotacao,
       total: o.total_documento,
@@ -68,9 +102,8 @@ export default async function CotacaoPropriaPage({ params }: { params: Promise<{
   const produtos: ProdutoPedido[] = itens.map(({ insumos, ...p }) => ({
     ...p,
     novo_no_cadastro: !!insumos?.created_at && new Date(insumos.created_at).getTime() === criadoEm,
-    ofertas: ofertasPorPedido.get(p.id)?.size ?? 0,
   }))
-  const comOferta = produtos.filter((p) => p.ofertas > 0).length
+  const comOferta = new Set(ofertas.map((o) => o.pedidoId)).size
   const novos = produtos.filter((p) => p.novo_no_cadastro).length
 
   return (
@@ -177,7 +210,12 @@ export default async function CotacaoPropriaPage({ params }: { params: Promise<{
         )}
       </section>
 
-      <ProdutosCotacaoPropria produtos={produtos} />
+      <ProdutosCotacaoPropria
+        cotacaoPropriaId={id}
+        produtos={produtos}
+        ofertas={ofertas}
+        fornecedores={fornecedoresDaCotacao}
+      />
     </div>
   )
 }

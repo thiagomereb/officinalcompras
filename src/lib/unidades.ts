@@ -59,6 +59,14 @@ export function precoPorUnidadeBase(
   return { valor: preco / qtd, base: u }
 }
 
+// Quantidade em qualquer unidade convertida para a base da grandeza (g, mL, un…),
+// para multiplicar pelo preço por unidade base. Unidade desconhecida fica como está.
+export function quantidadeEmBase(quantidade: number, unidade: string | null): { valor: number; base: string | null } {
+  const u = normalizarUnidade(unidade)
+  const conv = u ? PARA_BASE[u] : undefined
+  return conv ? { valor: quantidade * conv.fator, base: conv.base } : { valor: quantidade, base: u }
+}
+
 // Unidades em que o comprador informa quanto vai comprar no mapa
 export const UNIDADES_QUANTIDADE = ['mg', 'g', 'kg', 'mL', 'L', 'kL'] as const
 export type UnidadeQuantidade = (typeof UNIDADES_QUANTIDADE)[number]
