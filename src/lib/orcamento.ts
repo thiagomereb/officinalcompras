@@ -5,6 +5,9 @@ import { normalizarUnidade } from './unidades'
 // (e daí por g/mL) é calculado aqui, não pedido a ela.
 
 export type CabecalhoOrcamento = {
+  // Como o fornecedor se identifica no documento (marca e razão social)
+  fornecedor_nome: string | null
+  fornecedor_razao_social: string | null
   numero: string | null
   data: string | null
   cnpj: string | null
@@ -86,6 +89,8 @@ export function unirPaginas(paginas: Record<string, unknown>[]): OrcamentoLido {
 
   return {
     cabecalho: {
+      fornecedor_nome: primeiro((p) => texto(p.fornecedor_nome, 120)),
+      fornecedor_razao_social: primeiro((p) => texto(p.fornecedor_razao_social, 160)),
       numero: primeiro((p) => texto(p.numero, 60)),
       data: primeiro((p) => dataISO(p.data)),
       cnpj: primeiro((p) => texto(p.cnpj, 30)),

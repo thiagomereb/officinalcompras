@@ -18,6 +18,8 @@ const PASTA_PAGINAS = 'orcamento-paginas'
 const ESCALA_PDF = 2
 const MAX_TENTATIVAS = 4
 const MAX_ESPERA_S = 90
+// Linhas do topo da primeira página usadas para reconhecer o fornecedor pelo nome
+const LINHAS_CABECALHO = 25
 
 async function paginasDoPdf(dados: ArrayBuffer): Promise<Pagina[]> {
   const pdfjsLib = await import('pdfjs-dist')
@@ -130,7 +132,7 @@ export async function lerOrcamento(
   arquivo: File,
   cotacaoPropriaId: string,
   progresso?: Progresso,
-): Promise<OrcamentoLido & { paginas: number }> {
+): Promise<OrcamentoLido & { paginas: number; textoCabecalho: string }> {
   const ext = extensaoDe(arquivo.name)
   progresso?.('Abrindo o arquivo…')
   const dados = await arquivo.arrayBuffer()
@@ -149,5 +151,19 @@ export async function lerOrcamento(
     progresso?.(paginas.length > 1 ? `Lendo a página ${i + 1} de ${paginas.length}…` : 'Lendo o orçamento…')
     respostas.push(await lerPagina(cotacaoPropriaId, pagina, i + 1, paginas.length, progresso))
   }
-  return { ...unirPaginas(respostas), paginas: paginas.length }
+  const lido = unirPaginas(respostas)
+
+  // O cabeçalho (onde o fornecedor se identifica) ajuda a reconhecê-lo pelo
+  // nome: as primeiras linhas da primeira página com texto, mais o nome que a
+  // leitura achou (único recurso em orçamento escaneado)
+  const primeiraComTexto = paginas.find((p): p is { texto: string } => 'texto' in p)
+  const textoCabecalho = [
+    lido.cabecalho.fornecedor_nome,
+    lido.cabecalho.fornecedor_razao_social,
+    primeiraComTexto?.texto.split('\n').slice(0, LINHAS_CABECALHO).join('\n'),
+  ]
+    .filter(Boolean)
+    .join('\n')
+
+  return { ...lido, paginas: paginas.length, textoCabecalho }
 }

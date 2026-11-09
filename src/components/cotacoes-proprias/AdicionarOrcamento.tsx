@@ -6,27 +6,16 @@ import Link from 'next/link'
 import { FileUp, Pencil } from 'lucide-react'
 import { enviarArquivoCotacao, removerArquivoCotacao, ACCEPT_ARQUIVO_COTACAO, LIMITE_ARQUIVO_BYTES } from '@/lib/supabase/upload'
 import { lerOrcamento } from '@/lib/orcamento-browser'
-import { conferirTotal, itemParaGravar, soDigitos, type OrcamentoLido } from '@/lib/orcamento'
+import { conferirTotal, itemParaGravar, type OrcamentoLido } from '@/lib/orcamento'
+import { reconhecerFornecedor, type FornecedorCadastro, type Reconhecimento } from '@/lib/reconhecer-fornecedor'
 import { precoPorUnidadeBase } from '@/lib/unidades'
 import { LeituraPreco } from '@/components/ui/LeituraPreco'
 import type { salvarOrcamento } from '@/app/(dashboard)/cotacoes-proprias/orcamentos-actions'
 import { SeletorProdutoPedido, type ProdutoPedidoOpcao } from './SeletorProdutoPedido'
 
-type Fornecedor = { id: string; razao_social: string; nome_fantasia: string | null; cnpj: string | null; codigo: string | null }
+type Fornecedor = FornecedorCadastro
 
 const nomeFornecedor = (f: Fornecedor) => f.nome_fantasia ?? f.razao_social
-
-// Fornecedor do orçamento pelo CNPJ: o exato primeiro; senão a raiz (8 primeiros
-// dígitos), que é a mesma em todas as filiais da empresa. Só escolhe sozinho
-// quando sobra um; com mais de um, devolve os candidatos para o comprador.
-function reconhecerFornecedor(fornecedores: Fornecedor[], cnpj: string | null): { id: string; candidatos: Fornecedor[] } {
-  const digitos = soDigitos(cnpj)
-  if (digitos.length < 8) return { id: '', candidatos: [] }
-  const exatos = fornecedores.filter((f) => soDigitos(f.cnpj) === digitos)
-  if (exatos.length === 1) return { id: exatos[0].id, candidatos: [] }
-  const mesmaRaiz = exatos.length ? exatos : fornecedores.filter((f) => soDigitos(f.cnpj).slice(0, 8) === digitos.slice(0, 8))
-  return mesmaRaiz.length === 1 ? { id: mesmaRaiz[0].id, candidatos: [] } : { id: '', candidatos: mesmaRaiz }
-}
 
 interface Props {
   cotacaoPropriaId: string
@@ -47,7 +36,7 @@ export function AdicionarOrcamento({ cotacaoPropriaId, fornecedores, pedidos, ac
   const [lido, setLido] = useState<(OrcamentoLido & { paginas: number }) | null>(null)
   const [vinculos, setVinculos] = useState<Vinculo[]>([])
   const [fornecedorId, setFornecedorId] = useState('')
-  const [candidatos, setCandidatos] = useState<Fornecedor[]>([])
+  const [reconhecimento, setReconhecimento] = useState<Reconhecimento | null>(null)
   const [filtro, setFiltro] = useState<Filtro>('todos')
   const [editando, setEditando] = useState<number | null>(null)
   const [progresso, setProgresso] = useState<string | null>(null)
@@ -71,9 +60,9 @@ export function AdicionarOrcamento({ cotacaoPropriaId, fornecedores, pedidos, ac
         setErro('Não encontrei itens com preço neste arquivo.')
         return
       }
-      const reconhecido = reconhecerFornecedor(fornecedores, r.cabecalho.cnpj)
+      const reconhecido = reconhecerFornecedor(fornecedores, r.cabecalho.cnpj, r.textoCabecalho)
       setFornecedorId(reconhecido.id)
-      setCandidatos(reconhecido.candidatos)
+      setReconhecimento(reconhecido)
       setVinculos(r.itens.map((i) => ({ codigo: i.codigo_pedido, conferido: false })))
       setFiltro('todos')
       setLido(r)
@@ -202,20 +191,34 @@ export function AdicionarOrcamento({ cotacaoPropriaId, fornecedores, pedidos, ac
                     </option>
                   ))}
                 </select>
-                {cab.cnpj && !fornecedorId && candidatos.length > 0 && (
+                {fornecedorId && reconhecimento?.motivo && reconhecimento.id === fornecedorId && (
+                  <p className="ajuda">
+                    {reconhecimento.motivo === 'cnpj'
+                      ? 'Reconhecido pelo CNPJ do orçamento.'
+                      : 'Reconhecido pelo nome da empresa no orçamento.'}
+                  </p>
+                )}
+                {(reconhecimento?.alternativas.length ?? 0) > 0 && (
                   <div className="ajuda">
-                    CNPJ do orçamento: <span className="leitura">{cab.cnpj}</span>. Mesma empresa no cadastro:
+                    {cab.cnpj && (
+                      <>
+                        CNPJ do orçamento: <span className="leitura">{cab.cnpj}</span>.{' '}
+                      </>
+                    )}
+                    {fornecedorId ? 'Outras empresas do mesmo CNPJ:' : 'Empresas do mesmo CNPJ no cadastro:'}
                     <span className="mt-1 flex flex-wrap gap-1">
-                      {candidatos.map((f) => (
-                        <button key={f.id} type="button" onClick={() => setFornecedorId(f.id)} className="btn btn-secundario btn-sm h-7">
-                          {nomeFornecedor(f)}
-                          {f.codigo && <span className="leitura text-ardosia">{f.codigo}</span>}
-                        </button>
-                      ))}
+                      {[...reconhecimento!.alternativas, ...fornecedores.filter((f) => f.id === reconhecimento!.id)]
+                        .filter((f) => f.id !== fornecedorId)
+                        .map((f) => (
+                          <button key={f.id} type="button" onClick={() => setFornecedorId(f.id)} className="btn btn-secundario btn-sm h-7">
+                            {nomeFornecedor(f)}
+                            {f.codigo && <span className="leitura text-ardosia">{f.codigo}</span>}
+                          </button>
+                        ))}
                     </span>
                   </div>
                 )}
-                {cab.cnpj && !fornecedorId && candidatos.length === 0 && (
+                {cab.cnpj && !fornecedorId && !reconhecimento?.alternativas.length && (
                   <p className="ajuda">
                     CNPJ do orçamento: <span className="leitura">{cab.cnpj}</span>, sem fornecedor com esse CNPJ no cadastro.
                     Escolha na lista (o CNPJ fica guardado nele) ou{' '}

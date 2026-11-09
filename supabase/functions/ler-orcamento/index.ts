@@ -44,11 +44,13 @@ Campos de cada item:
 - codigo_pedido: o código do produto pedido que é o MESMO produto, ou null. Mesmo produto = mesma substância e mesma forma; ignore marca, embalagem e grafia. Sal, forma (pó, solução, extrato seco, glicólico), teor/padronização e uso (interno/externo) podem fazer de dois itens produtos diferentes: na dúvida entre variantes, escolha a que corresponde e explique em obs. Não chute: se não foi pedido, null.
 - obs: até 12 palavras, só quando houver ressalva no vínculo (forma, teor, sal) ou quando codigo_pedido for null e houver um pedido parecido.
 
-Cabeçalho (null no que não aparecer nesta página): numero do orçamento, data (AAAA-MM-DD), cnpj do FORNECEDOR (não o da farmácia), validade da proposta como texto, pedido_minimo (R$), frete ("CIF", "FOB" ou null) e o total do documento.`
+Cabeçalho (null no que não aparecer nesta página): fornecedor_nome (a marca/nome com que o FORNECEDOR se apresenta, ex.: "Fagron Brazil") e fornecedor_razao_social (a razão social dele, se aparecer) — nunca os da farmácia cliente; numero do orçamento, data (AAAA-MM-DD), cnpj do FORNECEDOR (não o da farmácia), validade da proposta como texto, pedido_minimo (R$), frete ("CIF", "FOB" ou null) e o total do documento.`
 
 const SCHEMA = {
   type: 'OBJECT',
   properties: {
+    fornecedor_nome: { type: 'STRING', nullable: true },
+    fornecedor_razao_social: { type: 'STRING', nullable: true },
     numero: { type: 'STRING', nullable: true },
     data: { type: 'STRING', nullable: true },
     cnpj: { type: 'STRING', nullable: true },
