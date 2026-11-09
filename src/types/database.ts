@@ -529,6 +529,7 @@ export type Database = {
           cancelado_em: string | null
           cancelado_por: string | null
           comparacao: Json | null
+          cotacao_propria_id: string | null
           cotacoes_ids: string[]
           created_at: string | null
           id: string
@@ -546,6 +547,7 @@ export type Database = {
           cancelado_em?: string | null
           cancelado_por?: string | null
           comparacao?: Json | null
+          cotacao_propria_id?: string | null
           cotacoes_ids?: string[]
           created_at?: string | null
           id?: string
@@ -563,6 +565,7 @@ export type Database = {
           cancelado_em?: string | null
           cancelado_por?: string | null
           comparacao?: Json | null
+          cotacao_propria_id?: string | null
           cotacoes_ids?: string[]
           created_at?: string | null
           id?: string
@@ -574,7 +577,15 @@ export type Database = {
           updated_at?: string | null
           valor_total?: number | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "mapas_cotacao_cotacao_propria_id_fkey"
+            columns: ["cotacao_propria_id"]
+            isOneToOne: false
+            referencedRelation: "cotacoes_proprias"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       sinonimos_ref: {
         Row: {

@@ -6,7 +6,7 @@ import { Check, Save, FileDown, Wand2 } from 'lucide-react'
 import type { CandidatoItem, GrupoInsumo } from '@/lib/comparacao'
 import type { salvarSelecoes, aprovarMapa } from '@/app/(dashboard)/mapas/actions'
 import { sugestaoDoGrupo, valorEstimado } from '@/lib/compras'
-import type { UltimaCompra } from '@/lib/mapas'
+import type { QuantidadePedida, UltimaCompra } from '@/lib/mapas'
 import { UNIDADES_QUANTIDADE, ehUnidadeQuantidade, type UnidadeQuantidade } from '@/lib/unidades'
 import { LeituraPreco } from '@/components/ui/LeituraPreco'
 
@@ -21,6 +21,8 @@ export type EscolhaSalva = {
 interface Props {
   grupos: GrupoInsumo[]
   escolhasSalvas: Record<string, EscolhaSalva>
+  // Quanto a cotação própria pediu de cada insumo: é a quantidade inicial da compra
+  quantidadesPedidas?: Record<string, QuantidadePedida>
   mapaId: string
   // Mapa aprovado ou cancelado: só leitura
   congelado: boolean
@@ -44,6 +46,7 @@ function unidadePadrao(c: CandidatoItem): UnidadeQuantidade | '' {
 export function ComparacaoTable({
   grupos,
   escolhasSalvas,
+  quantidadesPedidas = {},
   mapaId,
   congelado,
   ultimasCompras = {},
@@ -55,12 +58,19 @@ export function ComparacaoTable({
   const [escolhas, setEscolhas] = useState<Record<string, string>>(() =>
     Object.fromEntries(salvas.map(([k, v]) => [k, v.cotacao_item_id])),
   )
-  const [quantidades, setQuantidades] = useState<Record<string, string>>(() =>
-    Object.fromEntries(salvas.map(([k, v]) => [k, v.quantidade != null ? String(v.quantidade) : ''])),
-  )
-  const [unidades, setUnidades] = useState<Record<string, UnidadeQuantidade | ''>>(() =>
-    Object.fromEntries(salvas.map(([k, v]) => [k, ehUnidadeQuantidade(v.quantidade_unidade) ? v.quantidade_unidade : ''])),
-  )
+  // A quantidade salva vale; sem ela, começa pela quantidade pedida na cotação própria
+  const [quantidades, setQuantidades] = useState<Record<string, string>>(() => ({
+    ...Object.fromEntries(Object.entries(quantidadesPedidas).map(([k, v]) => [k, String(v.quantidade)])),
+    ...Object.fromEntries(salvas.flatMap(([k, v]) => (v.quantidade != null ? [[k, String(v.quantidade)]] : []))),
+  }))
+  const [unidades, setUnidades] = useState<Record<string, UnidadeQuantidade | ''>>(() => ({
+    ...Object.fromEntries(Object.entries(quantidadesPedidas).map(([k, v]) => [k, v.unidade])),
+    ...Object.fromEntries(
+      salvas.flatMap(([k, v]) =>
+        v.quantidade != null && ehUnidadeQuantidade(v.quantidade_unidade) ? [[k, v.quantidade_unidade]] : [],
+      ),
+    ),
+  }))
   const [alterado, setAlterado] = useState(false)
   const [acao, setAcao] = useState<'salvar' | 'aprovar' | null>(null)
   const [pending, startTransition] = useTransition()
@@ -358,6 +368,15 @@ export function ComparacaoTable({
                         ))}
                       </select>
                     </div>
+                  )}
+                  {quantidadesPedidas[grupo.insumo_id] && (
+                    <p className="ajuda mt-1">
+                      Pedido na cotação:{' '}
+                      <span className="leitura">
+                        {quantidadesPedidas[grupo.insumo_id].quantidade.toLocaleString('pt-BR', { maximumFractionDigits: 4 })}{' '}
+                        {quantidadesPedidas[grupo.insumo_id].unidade}
+                      </span>
+                    </p>
                   )}
                 </div>
 

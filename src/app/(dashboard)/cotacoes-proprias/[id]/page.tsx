@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { Paperclip, FileText } from 'lucide-react'
+import { Paperclip, FileText, GitCompare } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { getArquivoSignedUrl } from '@/lib/supabase/storage'
 import { buscarTodos } from '@/lib/supabase/consultas'
@@ -36,7 +36,7 @@ export default async function CotacaoPropriaPage({
   const { data: cotacao } = await supabase.from('cotacoes_proprias').select('*').eq('id', id).single()
   if (!cotacao) notFound()
 
-  const [itens, arquivoUrl, { data: orcamentos }] = await Promise.all([
+  const [itens, arquivoUrl, { data: orcamentos }, { data: mapas }] = await Promise.all([
     buscarTodos((de, ate) =>
       supabase
         .from('cotacao_propria_itens')
@@ -51,6 +51,12 @@ export default async function CotacaoPropriaPage({
       .select('id, fornecedor_id, numero_orcamento, data_cotacao, total_documento, fornecedores(razao_social, nome_fantasia), cotacao_itens(cotacao_propria_item_id, vinculo_origem)')
       .eq('cotacao_propria_id', id)
       .order('created_at'),
+    supabase
+      .from('mapas_cotacao')
+      .select('id, status')
+      .eq('cotacao_propria_id', id)
+      .neq('status', 'cancelado')
+      .order('created_at', { ascending: false }),
   ])
 
   const nomeFornecedor = (f: unknown) => {
@@ -112,6 +118,8 @@ export default async function CotacaoPropriaPage({
     ...p,
     novo_no_cadastro: !!insumos?.created_at && new Date(insumos.created_at).getTime() === criadoEm,
   }))
+  // O mapa mais recente que não foi cancelado
+  const mapa = mapas?.[0]
   const comOferta = new Set(ofertas.map((o) => o.pedidoId)).size
   const novos = produtos.filter((p) => p.novo_no_cadastro).length
 
@@ -142,6 +150,19 @@ export default async function CotacaoPropriaPage({
               </a>
             )}
             <ExcluirCotacaoPropriaButton id={id} numero={cotacao.numero} action={excluirCotacaoPropria} />
+            {mapa ? (
+              <Link href={`/mapas/${mapa.id}`} className="btn btn-secundario btn-sm">
+                <GitCompare size={14} />
+                {mapa.status === 'rascunho' ? 'Abrir mapa' : 'Mapa aprovado'}
+              </Link>
+            ) : (
+              linhasOrcamento.length > 0 && (
+                <Link href={`/mapas/novo?cotacao=${id}`} className="btn btn-secundario btn-sm">
+                  <GitCompare size={14} />
+                  Gerar mapa
+                </Link>
+              )
+            )}
             <AdicionarOrcamento
               cotacaoPropriaId={id}
               carregarDados={dadosParaNovoOrcamento}

@@ -18,7 +18,7 @@ export default async function MapasPage() {
   const supabase = await createClient()
   const { data: mapas } = await supabase
     .from('mapas_cotacao')
-    .select('id, titulo, status, cotacoes_ids, created_at, aprovado_em, aprovado_por, valor_total, mapa_cotacao_itens(id)')
+    .select('id, titulo, status, cotacoes_ids, created_at, aprovado_em, aprovado_por, valor_total, mapa_cotacao_itens(id), cotacoes_proprias(id, numero, cotacoes(id))')
     .order('created_at', { ascending: false })
 
   const rascunhos = mapas?.filter((m) => m.status === 'rascunho').length ?? 0
@@ -46,7 +46,7 @@ export default async function MapasPage() {
         <Vazio
           icone={GitCompare}
           titulo="Nenhum mapa de cotação"
-          texto="Um mapa compara as cotações escolhidas, insumo por insumo. O comprador escolhe a oferta de cada um e aprova a compra."
+          texto="Um mapa compara os orçamentos de uma cotação própria, produto por produto. O comprador escolhe a oferta de cada um e aprova a compra."
           acao={
             <Link href="/mapas/novo" className="btn btn-primario btn-sm">
               Novo mapa
@@ -73,6 +73,9 @@ export default async function MapasPage() {
               {mapas.map((m) => {
                 const status = STATUS[m.status as keyof typeof STATUS] ?? STATUS.rascunho
                 const totalItens = (m.mapa_cotacao_itens as { id: string }[])?.length ?? 0
+                const cotacao = m.cotacoes_proprias as { id: string; numero: string; cotacoes: { id: string }[] } | null
+                // Rascunho compara os orçamentos que a cotação tem agora; aprovado, os que foram gravados
+                const orcamentos = cotacao && m.status === 'rascunho' ? cotacao.cotacoes.length : m.cotacoes_ids.length
 
                 return (
                   <tr key={m.id} className={m.status === 'cancelado' ? 'text-ardosia' : undefined}>
@@ -80,7 +83,10 @@ export default async function MapasPage() {
                       <Link href={`/mapas/${m.id}`} className="font-medium hover:underline">
                         {m.titulo}
                       </Link>
-                      <p className="text-[12px] text-ardosia">{m.cotacoes_ids.length} cotação(ões)</p>
+                      <p className="text-[12px] text-ardosia">
+                        {cotacao && <>Cotação {cotacao.numero} · </>}
+                        {orcamentos} orçamento(s)
+                      </p>
                     </td>
                     <td>
                       <span className={`selo ${status.cls}`}>{status.label}</span>

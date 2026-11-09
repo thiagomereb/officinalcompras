@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
-import { carregarGruposMapa } from '@/lib/mapas'
+import { carregarGruposMapa, orcamentosDoMapa } from '@/lib/mapas'
 import { montarAprovacao, type Escolha } from '@/lib/compras'
 import { ehUnidadeQuantidade } from '@/lib/unidades'
 import type { Falha } from '@/lib/acoes'
@@ -42,20 +42,30 @@ function escolhasValidas(escolhas: unknown): Escolha[] | Falha {
   return resultado
 }
 
+// O mapa é de uma cotação própria e compara os orçamentos dela (em rascunho, a
+// lista é lida na hora — ver orcamentosDoMapa)
 export async function criarMapa(formData: FormData): Promise<Falha | void> {
   const supabase = await createClient()
 
-  const titulo = String(formData.get('titulo') ?? '').trim()
-  const cotacoesIds = formData.getAll('cotacoes_ids').map(String).filter(Boolean)
+  const cotacaoPropriaId = String(formData.get('cotacao_propria_id') ?? '')
+  if (!/^[0-9a-f-]{36}$/i.test(cotacaoPropriaId)) return { erro: 'Escolha a cotação própria.' }
 
-  if (!titulo) return { erro: 'Informe o título do mapa.' }
-  if (cotacoesIds.length === 0) return { erro: 'Selecione pelo menos uma cotação.' }
+  const [{ data: cotacao }, { data: orcamentos, error: erroOrcamentos }] = await Promise.all([
+    supabase.from('cotacoes_proprias').select('numero').eq('id', cotacaoPropriaId).single(),
+    supabase.from('cotacoes').select('id').eq('cotacao_propria_id', cotacaoPropriaId).order('created_at'),
+  ])
+  if (!cotacao) return { erro: 'Cotação própria não encontrada.' }
+  if (erroOrcamentos) return { erro: erroOrcamentos.message }
+  if (!orcamentos?.length) return { erro: 'Esta cotação ainda não tem orçamento de fornecedor para comparar.' }
+
+  const titulo = String(formData.get('titulo') ?? '').trim().slice(0, 200) || `Cotação ${cotacao.numero}`
 
   const { data, error } = await supabase
     .from('mapas_cotacao')
     .insert({
       titulo,
-      cotacoes_ids: cotacoesIds,
+      cotacao_propria_id: cotacaoPropriaId,
+      cotacoes_ids: orcamentos.map((o) => o.id),
       // A coluna é da época dos pesos por critério; mapa novo não usa
       pesos: null,
       status: 'rascunho',
@@ -66,6 +76,7 @@ export async function criarMapa(formData: FormData): Promise<Falha | void> {
   if (error) return { erro: error.message }
 
   revalidatePath('/mapas')
+  revalidatePath(`/cotacoes-proprias/${cotacaoPropriaId}`)
   redirect(`/mapas/${data.id}`)
 }
 
@@ -118,7 +129,7 @@ export async function aprovarMapa(mapaId: string, escolhas: unknown): Promise<Fa
 
   const { data: mapa, error } = await supabase
     .from('mapas_cotacao')
-    .select('status, cotacoes_ids')
+    .select('status, cotacoes_ids, cotacao_propria_id')
     .eq('id', mapaId)
     .single()
   if (error || !mapa) return { erro: 'Mapa não encontrado.' }
@@ -127,7 +138,14 @@ export async function aprovarMapa(mapaId: string, escolhas: unknown): Promise<Fa
   const validas = escolhasValidas(escolhas)
   if ('erro' in validas) return validas
 
-  const grupos = await carregarGruposMapa(supabase, mapa.cotacoes_ids)
+  // Fica registrado quais orçamentos foram comparados na aprovação
+  const orcamentos = await orcamentosDoMapa(supabase, mapa)
+  if (mapa.cotacao_propria_id) {
+    const { error: erroLista } = await supabase.from('mapas_cotacao').update({ cotacoes_ids: orcamentos }).eq('id', mapaId)
+    if (erroLista) return { erro: erroLista.message }
+  }
+
+  const grupos = await carregarGruposMapa(supabase, orcamentos)
   const aprovacao = montarAprovacao(grupos, validas)
   if (!aprovacao.ok) return { erro: aprovacao.erros.join(' ') }
 

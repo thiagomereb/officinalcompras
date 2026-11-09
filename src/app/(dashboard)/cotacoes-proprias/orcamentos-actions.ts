@@ -201,7 +201,7 @@ export async function alterarVinculoOrcamento(
 
   const { data: item } = await supabase
     .from('cotacao_itens')
-    .select('descricao_original')
+    .select('descricao_original, insumo_id')
     .eq('id', itemId)
     .eq('cotacao_id', orcamentoId)
     .single()
@@ -217,6 +217,12 @@ export async function alterarVinculoOrcamento(
       .single()
     if (!pedido) return { erro: 'Produto pedido não encontrado nesta cotação.' }
     insumoId = pedido.insumo_id
+  }
+
+  // A escolha feita num mapa em rascunho foi sob o produto antigo: é desfeita
+  if (item.insumo_id !== insumoId) {
+    const desfeitas = await desfazerEscolhasEmRascunho(supabase, { itemId })
+    if (desfeitas) return desfeitas
   }
 
   const { error } = await supabase
@@ -256,11 +262,41 @@ export async function confirmarSugestoes(orcamentoId: string, cotacaoPropriaId: 
   return { confirmados: sugeridos.length }
 }
 
+// Escolhas de mapa que apontam para um item (ou para os itens de um orçamento).
+// Em rascunho são apagadas; em mapa aprovado ou cancelado o item é registro
+// de compra e não pode sumir.
+async function desfazerEscolhasEmRascunho(
+  supabase: Supabase,
+  alvo: { itemId: string } | { orcamentoId: string },
+  bloquearAprovado = false,
+): Promise<Falha | void> {
+  const consulta = supabase.from('mapa_cotacao_itens').select('id, mapas_cotacao(status), cotacao_itens!inner(cotacao_id)')
+  const { data: escolhas, error } =
+    'itemId' in alvo
+      ? await consulta.eq('cotacao_item_id', alvo.itemId)
+      : await consulta.eq('cotacao_itens.cotacao_id', alvo.orcamentoId)
+  if (error) return { erro: error.message }
+
+  const status = (e: { mapas_cotacao: unknown }) => (e.mapas_cotacao as { status: string } | null)?.status
+  if (bloquearAprovado && (escolhas ?? []).some((e) => status(e) !== 'rascunho')) {
+    return { erro: 'Há itens deste orçamento comprados num mapa aprovado. Ele fica guardado como registro da compra.' }
+  }
+  const rascunho = (escolhas ?? []).filter((e) => status(e) === 'rascunho').map((e) => e.id)
+  if (!rascunho.length) return
+  const { error: erroExclusao } = await supabase.from('mapa_cotacao_itens').delete().in('id', rascunho)
+  if (erroExclusao) return { erro: erroExclusao.message }
+  revalidatePath('/mapas', 'layout')
+}
+
 export async function excluirOrcamento(orcamentoId: string, cotacaoPropriaId: string): Promise<Falha | void> {
   const supabase = await createClient()
+  const desfeitas = await desfazerEscolhasEmRascunho(supabase, { orcamentoId }, true)
+  if (desfeitas) return desfeitas
+
   const { data: orcamento } = await supabase.from('cotacoes').select('arquivo_url').eq('id', orcamentoId).single()
   const { error } = await supabase.from('cotacoes').delete().eq('id', orcamentoId)
   if (error) return { erro: error.message }
   await removerArquivos(supabase, [orcamento?.arquivo_url ?? null])
   revalidatePath(caminho(cotacaoPropriaId))
+  revalidatePath('/mapas', 'layout')
 }

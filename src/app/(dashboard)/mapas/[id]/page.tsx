@@ -2,7 +2,7 @@
 import { GitCompare, Ban } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import type { GrupoInsumo } from '@/lib/comparacao'
-import { carregarGruposMapa, carregarUltimasCompras, type UltimaCompra } from '@/lib/mapas'
+import { carregarGruposMapa, carregarUltimasCompras, orcamentosDoMapa, quantidadesPedidas, type UltimaCompra } from '@/lib/mapas'
 import { ehComparacaoCongelada } from '@/lib/compras'
 import { emLotes } from '@/lib/supabase/consultas'
 import { ComparacaoTable, type EscolhaSalva } from '@/components/mapas/ComparacaoTable'
@@ -62,14 +62,22 @@ export default async function MapaPage({ params }: { params: Promise<{ id: strin
   const congelada = ehComparacaoCongelada(mapa.comparacao) ? mapa.comparacao : null
   const status = STATUS[mapa.status as keyof typeof STATUS] ?? STATUS.rascunho
 
+  const [orcamentos, { data: cotacaoPropria }] = await Promise.all([
+    orcamentosDoMapa(supabase, mapa),
+    mapa.cotacao_propria_id
+      ? supabase.from('cotacoes_proprias').select('id, numero').eq('id', mapa.cotacao_propria_id).single()
+      : Promise.resolve({ data: null }),
+  ])
+
   // Aprovado: desenha a comparação como estava na aprovação. Rascunho (ou
   // aprovado antes do registro congelado existir): calcula com os dados atuais.
-  const [grupos, { data: escolhasRows }] = await Promise.all([
-    congelada && !rascunho ? Promise.resolve(congelada.grupos) : carregarGruposMapa(supabase, mapa.cotacoes_ids),
+  const [grupos, { data: escolhasRows }, pedidas] = await Promise.all([
+    congelada && !rascunho ? Promise.resolve(congelada.grupos) : carregarGruposMapa(supabase, orcamentos),
     supabase
       .from('mapa_cotacao_itens')
       .select('insumo_id, cotacao_item_id, quantidade, quantidade_unidade')
       .eq('mapa_id', id),
+    rascunho ? quantidadesPedidas(supabase, mapa.cotacao_propria_id) : Promise.resolve({}),
   ])
 
   const insumoIds = grupos.map((g) => g.insumo_id)
@@ -92,13 +100,17 @@ export default async function MapaPage({ params }: { params: Promise<{ id: strin
   return (
     <div className="pagina">
       <Cabecalho
-        voltar={{ href: '/mapas', label: 'Mapas de cotação' }}
+        voltar={
+          cotacaoPropria
+            ? { href: `/cotacoes-proprias/${cotacaoPropria.id}`, label: `Cotação ${cotacaoPropria.numero}` }
+            : { href: '/mapas', label: 'Mapas de cotação' }
+        }
         grupo="Mapa de cotação"
         titulo={mapa.titulo}
         descricao={
           <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
             <span>
-              {grupos.length} insumo(s) · {mapa.cotacoes_ids.length} cotação(ões)
+              {grupos.length} insumo(s) · {orcamentos.length} orçamento(s)
             </span>
             <span className={`selo ${status.cls}`}>{status.label}</span>
           </span>
@@ -159,6 +171,7 @@ export default async function MapaPage({ params }: { params: Promise<{ id: strin
           key={mapa.status}
           grupos={grupos}
           escolhasSalvas={escolhasSalvas}
+          quantidadesPedidas={pedidas}
           mapaId={id}
           congelado={!rascunho}
           ultimasCompras={ultimasCompras}

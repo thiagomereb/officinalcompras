@@ -7,6 +7,48 @@ import { buscarTodos, emLotes } from './supabase/consultas'
 
 type Fornecedor = { razao_social: string; nome_fantasia: string | null } | null
 
+type MapaBase = { cotacao_propria_id: string | null; cotacoes_ids: string[]; status: string }
+
+// Orçamentos que o mapa compara. Mapa de cotação própria em rascunho lê os
+// orçamentos dela na hora (entra o que chegou depois de criado); aprovado ou
+// cancelado usa a lista gravada.
+export async function orcamentosDoMapa(supabase: SupabaseClient<Database>, mapa: MapaBase): Promise<string[]> {
+  if (!mapa.cotacao_propria_id || mapa.status !== 'rascunho') return mapa.cotacoes_ids
+  const { data, error } = await supabase
+    .from('cotacoes')
+    .select('id')
+    .eq('cotacao_propria_id', mapa.cotacao_propria_id)
+    .order('created_at')
+  if (error) throw new Error(error.message)
+  return (data ?? []).map((c) => c.id)
+}
+
+export type QuantidadePedida = { quantidade: number; unidade: UnidadeQuantidade }
+
+// Quanto a cotação própria pediu de cada insumo, para começar a quantidade de
+// compra do mapa (o comprador ajusta)
+export async function quantidadesPedidas(
+  supabase: SupabaseClient<Database>,
+  cotacaoPropriaId: string | null,
+): Promise<Record<string, QuantidadePedida>> {
+  if (!cotacaoPropriaId) return {}
+  const pedidos = await buscarTodos((de, ate) =>
+    supabase
+      .from('cotacao_propria_itens')
+      .select('insumo_id, quantidade, unidade')
+      .eq('cotacao_propria_id', cotacaoPropriaId)
+      .order('ordem')
+      .range(de, ate),
+  )
+  const r: Record<string, QuantidadePedida> = {}
+  for (const p of pedidos) {
+    if (!r[p.insumo_id] && ehUnidadeQuantidade(p.unidade) && p.quantidade > 0) {
+      r[p.insumo_id] = { quantidade: p.quantidade, unidade: p.unidade }
+    }
+  }
+  return r
+}
+
 // Monta os grupos de comparação de um mapa: cada item vinculado das cotações
 // do mapa vira uma oferta, comparada pelo preço na unidade base com as outras
 // do mesmo insumo. Usado pela tela do mapa, pela aprovação e pelo PDF, que
@@ -116,6 +158,8 @@ export type EscolhaDocumento = {
 export type DocumentoMapa = {
   mapa: Tables<'mapas_cotacao'>
   rascunho: boolean
+  // Quantos orçamentos o mapa compara
+  orcamentos: number
   grupos: GrupoInsumo[]
   escolhas: Map<string, EscolhaDocumento>
   // Rascunho: soma estimada na hora; aprovado: o valor gravado na aprovação
@@ -133,9 +177,10 @@ export async function carregarDocumentoMapa(
 
   const rascunho = mapa.status === 'rascunho'
   const congelada = ehComparacaoCongelada(mapa.comparacao) ? mapa.comparacao : null
+  const orcamentos = await orcamentosDoMapa(supabase, mapa)
 
   const [grupos, { data: linhas }] = await Promise.all([
-    congelada && !rascunho ? Promise.resolve(congelada.grupos) : carregarGruposMapa(supabase, mapa.cotacoes_ids),
+    congelada && !rascunho ? Promise.resolve(congelada.grupos) : carregarGruposMapa(supabase, orcamentos),
     supabase
       .from('mapa_cotacao_itens')
       .select('insumo_id, cotacao_item_id, quantidade, quantidade_unidade, valor_total')
@@ -160,5 +205,5 @@ export async function carregarDocumentoMapa(
     ? [...escolhas.values()].reduce((soma, e) => soma + (e.valor ?? 0), 0)
     : mapa.valor_total
 
-  return { mapa, rascunho, grupos, escolhas, total }
+  return { mapa, rascunho, orcamentos: orcamentos.length, grupos, escolhas, total }
 }

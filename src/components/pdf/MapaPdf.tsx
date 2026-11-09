@@ -12,7 +12,7 @@ const SITUACAO = {
 } as const
 
 export function MapaPdf({ doc, geradoEm }: { doc: DocumentoMapa; geradoEm: string }) {
-  const { mapa, grupos, escolhas, total, rascunho } = doc
+  const { mapa, grupos, escolhas, total, rascunho, orcamentos } = doc
   const situacao = SITUACAO[mapa.status as keyof typeof SITUACAO] ?? SITUACAO.rascunho
   const comprados = grupos.filter((g) => escolhas.has(g.insumo_id)).length
 
@@ -45,8 +45,7 @@ export function MapaPdf({ doc, geradoEm }: { doc: DocumentoMapa; geradoEm: strin
           <Text style={estilos.rotulo}>Mapa de cotação</Text>
           <Text style={[estilos.titulo, { marginTop: 2 }]}>{mapa.titulo}</Text>
           <Text style={[estilos.suave, { marginTop: 4 }]}>
-            {grupos.length} insumo(s) comparado(s) · {comprados} com fornecedor escolhido · {mapa.cotacoes_ids.length}{' '}
-            cotação(ões)
+            {grupos.length} insumo(s) comparado(s) · {comprados} com fornecedor escolhido · {orcamentos} orçamento(s)
           </Text>
           {mapa.aprovado_em && (
             <Text style={[estilos.suave, { marginTop: 2 }]}>

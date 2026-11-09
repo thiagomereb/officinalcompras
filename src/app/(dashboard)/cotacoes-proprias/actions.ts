@@ -80,10 +80,21 @@ export async function importarCotacaoPropria(payload: unknown): Promise<Falha | 
 export async function excluirCotacaoPropria(id: string): Promise<Falha | void> {
   const supabase = await createClient()
 
+  // Mapa em rascunho vai junto; aprovado ou cancelado é registro de compra
+  const { count: mapasFechados } = await supabase
+    .from('mapas_cotacao')
+    .select('id', { count: 'exact', head: true })
+    .eq('cotacao_propria_id', id)
+    .neq('status', 'rascunho')
+  if (mapasFechados) {
+    return { erro: 'Esta cotação tem mapa aprovado ou cancelado, que fica no histórico de compras. Ela não pode ser excluída.' }
+  }
+
   const { data: cotacao } = await supabase.from('cotacoes_proprias').select('arquivo_url').eq('id', id).single()
   const { error } = await supabase.from('cotacoes_proprias').delete().eq('id', id)
   if (error) return { erro: error.message }
 
   await removerArquivos(supabase, [cotacao?.arquivo_url ?? null])
   revalidatePath('/cotacoes-proprias')
+  revalidatePath('/mapas')
 }
