@@ -17,7 +17,18 @@ import { createClient } from 'npm:@supabase/supabase-js@2.105.4'
 
 const MODELO = 'gemini-3.5-flash'
 const GEMINI_TIMEOUT_MS = 110_000
-const GEMINI_MAX_RETRIES = 2
+// Uma repetição rápida para um soluço da IA; alta demanda mais longa quem
+// espera é o navegador (Retry-After), fora do relógio da função
+const GEMINI_MAX_RETRIES = 1
+// O worker da Edge Function vive 150s desde que sobe e atende várias chamadas
+// em sequência; chamada que ainda está rodando quando ele chega ao limite é
+// cortada (status 546). Por isso a leitura conta o tempo do worker, não só o
+// da chamada.
+const VIDA_WORKER_MS = 150_000
+const FOLGA_WORKER_MS = 5_000
+// Com menos que isso de vida, a página não começa neste worker
+const MINIMO_PARA_LER_MS = 25_000
+const INICIO_WORKER = Date.now()
 const MAX_TEXTO = 60_000
 const MAX_IMAGEM_BYTES = 5 * 1024 * 1024
 const RATE_LIMIT_RPM = 20
@@ -86,6 +97,8 @@ const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  // Sem isto o navegador não enxerga o Retry-After e repete sem esperar
+  'Access-Control-Expose-Headers': 'Retry-After',
 }
 
 function jsonResponse(body: unknown, status = 200, extra: Record<string, string> = {}) {
@@ -94,6 +107,23 @@ function jsonResponse(body: unknown, status = 200, extra: Record<string, string>
     headers: { ...CORS_HEADERS, 'Content-Type': 'application/json', ...extra },
   })
 }
+
+// Peça para o navegador tentar de novo daqui a tantos segundos
+function tenteDepois(error: string, status: number, segundos: number) {
+  return jsonResponse({ error, retry_after: segundos }, status, { 'Retry-After': String(segundos) })
+}
+
+function vidaRestante(): number {
+  const idade = Date.now() - INICIO_WORKER
+  // Worker que passou do limite conhecido: o limite mudou, não há o que contar
+  if (idade > VIDA_WORKER_MS + 10_000) return Infinity
+  return VIDA_WORKER_MS - FOLGA_WORKER_MS - idade
+}
+
+// Segundos até este worker ser trocado, mais uma folga
+const esperaPeloWorker = () => Math.max(1, Math.ceil(vidaRestante() / 1000) + FOLGA_WORKER_MS / 1000 + 2)
+
+class TempoDoWorker extends Error {}
 
 function classify429(message: string): string {
   const msg = message.toLowerCase()
@@ -140,8 +170,11 @@ function validarImagemUrl(urlStr: unknown, supabaseUrl: string): string | null {
 }
 
 async function chamarGemini(apiKey: string, body: string, tentativa = 1): Promise<Response> {
+  const limite = Math.min(GEMINI_TIMEOUT_MS, vidaRestante())
+  if (limite < MINIMO_PARA_LER_MS) throw new TempoDoWorker()
+  const porTempoDoWorker = limite < GEMINI_TIMEOUT_MS
   const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), GEMINI_TIMEOUT_MS)
+  const timeout = setTimeout(() => controller.abort(), limite)
   let resp: Response
   try {
     resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${MODELO}:generateContent`, {
@@ -152,13 +185,17 @@ async function chamarGemini(apiKey: string, body: string, tentativa = 1): Promis
     })
   } catch (err) {
     clearTimeout(timeout)
-    if ((err as Error).name === 'AbortError') throw new Error(`A IA não respondeu em ${GEMINI_TIMEOUT_MS / 1000}s.`)
+    if ((err as Error).name === 'AbortError') {
+      if (porTempoDoWorker) throw new TempoDoWorker()
+      throw new Error(`A IA não respondeu em ${GEMINI_TIMEOUT_MS / 1000}s.`)
+    }
     throw err
   }
   clearTimeout(timeout)
 
   if ([429, 503, 529].includes(resp.status) && tentativa <= GEMINI_MAX_RETRIES) {
-    const atraso = Math.pow(2, tentativa) * 1500 + Math.random() * 1000
+    await resp.body?.cancel()
+    const atraso = 2000 + Math.random() * 1000
     console.warn(`[ler-orcamento] status ${resp.status}, tentativa ${tentativa}, aguardando ${Math.round(atraso)}ms`)
     await new Promise((r) => setTimeout(r, atraso))
     return chamarGemini(apiKey, body, tentativa + 1)
@@ -176,6 +213,7 @@ function base64(buffer: ArrayBuffer): string {
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: CORS_HEADERS })
 
+  const inicio = Date.now()
   try {
     const apiKey = Deno.env.get('GEMINI_API_KEY')
     if (!apiKey) return jsonResponse({ error: 'Secret GEMINI_API_KEY não configurado.' }, 500)
@@ -205,8 +243,13 @@ Deno.serve(async (req) => {
     if (erroPedidos) throw new Error(erroPedidos.message)
     if (!pedidos?.length) return jsonResponse({ error: 'Cotação própria sem produtos.' }, 404)
 
+    // Worker perto do fim: a página espera ele ser trocado em vez de ser cortada no meio
+    if (vidaRestante() < MINIMO_PARA_LER_MS) {
+      return tenteDepois('Reiniciando a leitura…', 503, esperaPeloWorker())
+    }
+
     const bloqueio = await verificarRateLimit(supabase)
-    if (bloqueio) return jsonResponse({ error: bloqueio }, 429, { 'Retry-After': '60' })
+    if (bloqueio) return tenteDepois(bloqueio, 429, 60)
 
     // Sinônimos do insumo de cada produto pedido (inclusive os aprendidos com
     // as correções do comprador): é por eles que muita descrição de fornecedor bate
@@ -257,17 +300,16 @@ Deno.serve(async (req) => {
     if (!resp.ok) {
       const corpo = await resp.json().catch(() => ({ error: { message: '' } }))
       const msg = corpo?.error?.message ?? ''
-      if (resp.status === 429) return jsonResponse({ error: classify429(msg) }, 429, { 'Retry-After': '60' })
-      if (resp.status === 503 || resp.status === 529) {
-        return jsonResponse({ error: 'A IA está com alta demanda agora. Tentando de novo…' }, 503, { 'Retry-After': '20' })
-      }
+      if (resp.status === 429) return tenteDepois(classify429(msg), 429, 60)
+      if (resp.status === 503 || resp.status === 529) return tenteDepois('A IA está com alta demanda agora.', 503, 20)
       throw new Error(msg || `Gemini retornou status ${resp.status}`)
     }
 
     const dados = await resp.json()
+    const segundos = ((Date.now() - inicio) / 1000).toFixed(1)
     const candidato = dados?.candidates?.[0]
     const usage = dados?.usageMetadata ?? {}
-    console.log(`[ler-orcamento] ${cabecalhoPagina} | ${temTexto ? 'texto' : 'imagem'} | finish=${candidato?.finishReason} | in=${usage.promptTokenCount} out=${usage.candidatesTokenCount} thoughts=${usage.thoughtsTokenCount ?? 0}`)
+    console.log(`[ler-orcamento] ${cabecalhoPagina} | ${temTexto ? 'texto' : 'imagem'} | ${segundos}s | worker ${Math.round((Date.now() - INICIO_WORKER) / 1000)}s | finish=${candidato?.finishReason} | in=${usage.promptTokenCount} out=${usage.candidatesTokenCount} thoughts=${usage.thoughtsTokenCount ?? 0}`)
     if (candidato?.finishReason === 'MAX_TOKENS') {
       return jsonResponse({ error: 'Página com itens demais para uma leitura. Divida o arquivo.' }, 422)
     }
@@ -291,6 +333,10 @@ Deno.serve(async (req) => {
 
     return jsonResponse({ ...lido, itens })
   } catch (err) {
+    if (err instanceof TempoDoWorker) {
+      console.warn(`[ler-orcamento] worker no fim da vida (${Math.round((Date.now() - INICIO_WORKER) / 1000)}s), página adiada`)
+      return tenteDepois('Reiniciando a leitura…', 503, esperaPeloWorker())
+    }
     const msg = err instanceof Error ? err.message : 'Erro inesperado.'
     console.error(`[ler-orcamento] erro: ${msg}`)
     return jsonResponse({ error: msg }, 500)

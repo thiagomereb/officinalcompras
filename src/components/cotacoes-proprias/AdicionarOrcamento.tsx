@@ -123,11 +123,17 @@ export function AdicionarOrcamento({ cotacaoPropriaId, carregarDados, salvar, ab
     setProgresso('Abrindo o arquivo…')
     try {
       const [r, d] = await Promise.all([
-        lerOrcamento(f, cotacaoPropriaId, (mensagem, e) => {
-          if (leitura.current !== minha) return
-          setProgresso(mensagem)
-          if (e) setEtapa(e)
-        }),
+        lerOrcamento(
+          f,
+          cotacaoPropriaId,
+          (mensagem, e) => {
+            if (leitura.current !== minha) return
+            setProgresso(mensagem)
+            if (e) setEtapa(e)
+          },
+          // Cancelada ou trocada por outro arquivo: para de chamar a IA
+          () => leitura.current === minha,
+        ),
         garantirDados(),
       ])
       if (leitura.current !== minha) return

@@ -10,6 +10,14 @@ import { unirPaginas, type OrcamentoLido } from './orcamento'
 type Pagina = { texto: string } | { imagem: Blob; ext: string; tipo: string }
 // etapa: em que página da leitura está (para a barra de progresso)
 type Progresso = (mensagem: string, etapa?: { atual: number; total: number }) => void
+// false quando o comprador cancelou: a leitura para na próxima página ou tentativa
+type Continuar = () => boolean
+
+class LeituraCancelada extends Error {
+  constructor() {
+    super('Leitura cancelada.')
+  }
+}
 
 // Página de PDF com menos texto que isso é tratada como escaneada (vai como imagem)
 const MIN_TEXTO_PAGINA = 80
@@ -17,8 +25,16 @@ const MIN_TEXTO_PAGINA = 80
 const LINHAS_POR_PAGINA_PLANILHA = 70
 const PASTA_PAGINAS = 'orcamento-paginas'
 const ESCALA_PDF = 2
-const MAX_TENTATIVAS = 4
+// Alta demanda da IA pode durar minutos: até 8 tentativas por página, com a
+// espera crescendo (o comprador pode cancelar a leitura)
+const MAX_TENTATIVAS = 8
 const MAX_ESPERA_S = 90
+// Quando a resposta não diz quanto esperar
+const ESPERA_PADRAO_S: Record<number, number> = { 429: 60, 503: 20 }
+// O worker da Edge Function foi trocado no meio da chamada (546) ou a
+// plataforma não respondeu (502/504): é só repetir a página
+const ESPERA_TROCA_S = 5
+const STATUS_TROCA = new Set([502, 504, 546])
 // Linhas do topo da primeira página usadas para reconhecer o fornecedor pelo nome
 const LINHAS_CABECALHO = 25
 
@@ -83,10 +99,16 @@ async function chamarLeitura(body: Record<string, unknown>): Promise<Record<stri
   const { data, error } = await createClient().functions.invoke('ler-orcamento', { body })
   if (error) {
     const resp = (error as { context?: Response }).context
-    const corpo = (await resp?.json?.().catch(() => null)) as { error?: string } | null
-    const status = resp?.status
-    const espera = status === 429 || status === 503 ? Number(resp?.headers.get('Retry-After')) : NaN
-    throw new ErroLeitura(corpo?.error ?? error.message, Number.isFinite(espera) ? espera : null)
+    const corpo = (await resp?.json?.().catch(() => null)) as { error?: string; retry_after?: number } | null
+    const status = resp?.status ?? 0
+    if (STATUS_TROCA.has(status)) throw new ErroLeitura('A leitura desta página foi interrompida.', ESPERA_TROCA_S)
+    if (status === 429 || status === 503) {
+      // O tempo vem no corpo; o cabeçalho só é visível se a função o expuser
+      const informado = Number(corpo?.retry_after ?? resp?.headers.get('Retry-After') ?? NaN)
+      const espera = Number.isFinite(informado) && informado > 0 ? informado : ESPERA_PADRAO_S[status]
+      throw new ErroLeitura(corpo?.error ?? error.message, espera)
+    }
+    throw new ErroLeitura(corpo?.error ?? error.message)
   }
   if (data?.error) throw new ErroLeitura(data.error)
   return data as Record<string, unknown>
@@ -98,6 +120,7 @@ async function lerPagina(
   n: number,
   total: number,
   progresso?: Progresso,
+  continuar: Continuar = () => true,
 ): Promise<Record<string, unknown>> {
   const supabase = createClient()
   let temporario: string | null = null
@@ -114,13 +137,19 @@ async function lerPagina(
       corpo.imagem_tipo = pagina.tipo
     }
 
+    const etapa = { atual: n, total }
+    const qual = total > 1 ? `a página ${n} de ${total}` : 'o orçamento'
     for (let tentativa = 1; ; tentativa++) {
+      if (!continuar()) throw new LeituraCancelada()
+      if (tentativa > 1) progresso?.(`Lendo ${qual} (tentativa ${tentativa} de ${MAX_TENTATIVAS})…`, etapa)
       try {
         return await chamarLeitura(corpo)
       } catch (e) {
-        const espera = e instanceof ErroLeitura ? e.esperarS : null
-        if (espera == null || espera > MAX_ESPERA_S || tentativa >= MAX_TENTATIVAS) throw e
-        progresso?.(`${(e as Error).message} Aguardando ${espera}s…`)
+        const pedida = e instanceof ErroLeitura ? e.esperarS : null
+        if (pedida == null || pedida > MAX_ESPERA_S || tentativa >= MAX_TENTATIVAS) throw e
+        // Com a IA sobrecarregada, cada nova tentativa espera um pouco mais
+        const espera = Math.min(MAX_ESPERA_S, pedida + (tentativa - 1) * 5)
+        progresso?.(`${(e as Error).message} Tentando ler ${qual} de novo em ${espera}s…`, etapa)
         await new Promise((ok) => setTimeout(ok, espera * 1000))
       }
     }
@@ -133,6 +162,7 @@ export async function lerOrcamento(
   arquivo: File,
   cotacaoPropriaId: string,
   progresso?: Progresso,
+  continuar?: Continuar,
 ): Promise<OrcamentoLido & { paginas: number; textoCabecalho: string }> {
   const ext = extensaoDe(arquivo.name)
   progresso?.('Abrindo o arquivo…')
@@ -153,7 +183,7 @@ export async function lerOrcamento(
       atual: i + 1,
       total: paginas.length,
     })
-    respostas.push(await lerPagina(cotacaoPropriaId, pagina, i + 1, paginas.length, progresso))
+    respostas.push(await lerPagina(cotacaoPropriaId, pagina, i + 1, paginas.length, progresso, continuar))
   }
   const lido = unirPaginas(respostas)
 
