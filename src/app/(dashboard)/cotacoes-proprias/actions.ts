@@ -1,7 +1,6 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { removerArquivos } from '@/lib/supabase/storage'
 import { mensagemErroBanco, type Falha } from '@/lib/acoes'
@@ -45,7 +44,9 @@ function itensValidos(itens: unknown): ItemCotacaoPropria[] | Falha {
   return validos
 }
 
-export async function importarCotacaoPropria(payload: unknown): Promise<Falha | void> {
+// Devolve o id em vez de redirecionar: no navegador, o redirect de uma action
+// chega como exceção, e o catch da importação apagava o PDF recém-enviado
+export async function importarCotacaoPropria(payload: unknown): Promise<Falha | { id: string }> {
   const p = (payload ?? {}) as Record<string, unknown>
   const numero = texto(p.numero, 20)
   const arquivoUrl = texto(p.arquivoUrl, 100)
@@ -74,7 +75,7 @@ export async function importarCotacaoPropria(payload: unknown): Promise<Falha | 
 
   revalidatePath('/cotacoes-proprias')
   revalidatePath('/insumos', 'layout')
-  redirect(`/cotacoes-proprias/${id}`)
+  return { id }
 }
 
 export async function excluirCotacaoPropria(id: string): Promise<Falha | void> {
@@ -90,11 +91,15 @@ export async function excluirCotacaoPropria(id: string): Promise<Falha | void> {
     return { erro: 'Esta cotação tem mapa aprovado ou cancelado, que fica no histórico de compras. Ela não pode ser excluída.' }
   }
 
-  const { data: cotacao } = await supabase.from('cotacoes_proprias').select('arquivo_url').eq('id', id).single()
+  // Os orçamentos saem junto (cascata): os arquivos deles também têm de sair do Storage
+  const [{ data: cotacao }, { data: orcamentos }] = await Promise.all([
+    supabase.from('cotacoes_proprias').select('arquivo_url').eq('id', id).single(),
+    supabase.from('cotacoes').select('arquivo_url').eq('cotacao_propria_id', id),
+  ])
   const { error } = await supabase.from('cotacoes_proprias').delete().eq('id', id)
   if (error) return { erro: error.message }
 
-  await removerArquivos(supabase, [cotacao?.arquivo_url ?? null])
+  await removerArquivos(supabase, [cotacao?.arquivo_url ?? null, ...(orcamentos ?? []).map((o) => o.arquivo_url)])
   revalidatePath('/cotacoes-proprias')
   revalidatePath('/mapas')
 }

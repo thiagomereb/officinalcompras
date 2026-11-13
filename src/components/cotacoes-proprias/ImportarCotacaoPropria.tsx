@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { FileUp } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { enviarArquivoCotacao, removerArquivoCotacao, LIMITE_ARQUIVO_BYTES } from '@/lib/supabase/upload'
@@ -27,6 +28,7 @@ export function ImportarCotacaoPropria({ action }: Props) {
   const [lendo, setLendo] = useState(false)
   const [erro, setErro] = useState<string | null>(null)
   const [enviando, startTransition] = useTransition()
+  const router = useRouter()
 
   async function ler(f: File) {
     setArquivo(f)
@@ -71,11 +73,14 @@ export function ImportarCotacaoPropria({ action }: Props) {
       try {
         path = await enviarArquivoCotacao(arquivo, arquivo.name)
         const r = await action({ ...lida, arquivoUrl: path, arquivoNome: arquivo.name })
-        // Sucesso redireciona para a cotação; só volta aqui com erro
-        if (r?.erro) {
+        if ('erro' in r) {
           await removerArquivoCotacao(path)
           setErro(r.erro)
+          return
         }
+        // Gravada: o PDF fica no Storage, a cotação aponta para ele
+        path = null
+        router.push(`/cotacoes-proprias/${r.id}`)
       } catch (e) {
         if (path) await removerArquivoCotacao(path)
         setErro((e as Error).message)
