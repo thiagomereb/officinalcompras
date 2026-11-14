@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import Link from 'next/link'
-import { Check, Save, FileDown, Wand2 } from 'lucide-react'
+import { Check, Save, FileDown, ShoppingCart, Wand2 } from 'lucide-react'
 import type { CandidatoItem, GrupoInsumo } from '@/lib/comparacao'
 import type { salvarSelecoes, aprovarMapa } from '@/app/(dashboard)/mapas/actions'
 import { sugestaoDoGrupo, valorEstimado } from '@/lib/compras'
@@ -26,6 +26,8 @@ interface Props {
   mapaId: string
   // Mapa aprovado ou cancelado: só leitura
   congelado: boolean
+  // Mapa cancelado não gera ordem de compra
+  ordemCompra?: boolean
   ultimasCompras?: Record<string, UltimaCompra>
   duplicatasInfo?: Record<string, InfoDuplicata>
   onSalvar?: typeof salvarSelecoes
@@ -39,7 +41,7 @@ const data = (iso: string) => new Date(iso).toLocaleDateString('pt-BR', { timeZo
 // (kg para "1 kg"), ou na base da grandeza; o comprador troca se quiser
 function unidadePadrao(c: CandidatoItem): UnidadeQuantidade | '' {
   if (ehUnidadeQuantidade(c.unidade)) return c.unidade
-  if (c.unidade_base === 'g' || c.unidade_base === 'mL') return c.unidade_base
+  if (c.unidade_base === 'g' || c.unidade_base === 'mL' || c.unidade_base === 'un') return c.unidade_base
   return ''
 }
 
@@ -49,6 +51,7 @@ export function ComparacaoTable({
   quantidadesPedidas = {},
   mapaId,
   congelado,
+  ordemCompra = false,
   ultimasCompras = {},
   duplicatasInfo,
   onSalvar,
@@ -72,6 +75,8 @@ export function ComparacaoTable({
     ),
   }))
   const [alterado, setAlterado] = useState(false)
+  // A ordem de compra sai das escolhas gravadas: no rascunho, precisa ter salvo
+  const [temSalvas, setTemSalvas] = useState(salvas.length > 0)
   const [acao, setAcao] = useState<'salvar' | 'aprovar' | null>(null)
   const [pending, startTransition] = useTransition()
   const [mensagem, setMensagem] = useState<{ ok: boolean; texto: string } | null>(null)
@@ -128,6 +133,7 @@ export function ComparacaoTable({
         return
       }
       setAlterado(false)
+      setTemSalvas(Object.keys(escolhas).length > 0)
       setMensagem({ ok: true, texto: 'Rascunho salvo.' })
     })
   }
@@ -179,6 +185,23 @@ export function ComparacaoTable({
             <FileDown size={14} />
             Baixar PDF
           </a>
+          {ordemCompra &&
+            (congelado || (temSalvas && !alterado) ? (
+              <Link href={`/mapas/${mapaId}/ordem-compra`} className="btn btn-secundario btn-sm" title="Um pedido por fornecedor, com os itens escolhidos">
+                <ShoppingCart size={14} />
+                Ordem de compra
+              </Link>
+            ) : (
+              <button
+                type="button"
+                disabled
+                className="btn btn-secundario btn-sm"
+                title={temSalvas ? 'Salve o rascunho para a ordem usar as escolhas atuais' : 'Escolha os fornecedores e salve o rascunho para gerar a ordem'}
+              >
+                <ShoppingCart size={14} />
+                Ordem de compra
+              </button>
+            ))}
           {!congelado && (
             <>
               {temSugestaoPendente && (

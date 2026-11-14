@@ -46,7 +46,10 @@ describe('valorEstimado', () => {
 
   it('recusa grandezas diferentes e oferta sem conversão', () => {
     expect(valorEstimado({ preco_base: 0.085, unidade_base: 'g' }, 3, 'L').tipo).toBe('grandeza_diferente')
-    expect(valorEstimado({ preco_base: 2, unidade_base: 'un' }, 3, 'kg').tipo).toBe('sem_conversao')
+    // Cápsula vendida por milheiro vira R$/un: 5.000 un a R$ 0,0503 = R$ 251,50
+    expect(valorEstimado({ preco_base: 0.0503, unidade_base: 'un' }, 5000, 'un')).toEqual({ tipo: 'valor', valor: 251.5 })
+    expect(valorEstimado({ preco_base: 2, unidade_base: 'un' }, 3, 'kg').tipo).toBe('grandeza_diferente')
+    expect(valorEstimado({ preco_base: 2, unidade_base: 'cáps' }, 3, 'un').tipo).toBe('sem_conversao')
     expect(valorEstimado({ preco_base: 0.085, unidade_base: 'g' }, null, 'kg').tipo).toBe('sem_quantidade')
   })
 })

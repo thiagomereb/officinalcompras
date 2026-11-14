@@ -5,6 +5,7 @@ import { ehComparacaoCongelada } from './compras'
 import { ehUnidadeQuantidade, type UnidadeQuantidade } from './unidades'
 import { buscarTodos, emLotes } from './supabase/consultas'
 import type { EscolhaImpressa, PedidoMapa } from './mapa-impresso'
+import { montarOrdens, type EscolhaParaOrdem, type OrdemFornecedor, type ProdutoDaCotacao } from './ordem-compra'
 
 type Fornecedor = { razao_social: string; nome_fantasia: string | null } | null
 
@@ -220,4 +221,107 @@ export async function carregarDocumentoMapa(
   }
 
   return { mapa, orcamentos: orcamentos.length, cotacaoPropria, pedidos, fornecedores, grupos, escolhas }
+}
+
+export type DocumentoOrdens = {
+  mapa: { id: string; titulo: string; status: string }
+  rascunho: boolean
+  // Nº do pedido: o da cotação própria, como no ERP
+  numero: string | null
+  ordens: OrdemFornecedor[]
+  empresa: Tables<'empresa'> | null
+}
+
+// Ordens de compra do mapa, uma por fornecedor. Aprovado usa a cópia gravada
+// na aprovação; rascunho (ou aprovado sem a cópia) usa a oferta atual.
+export async function carregarOrdensCompra(
+  supabase: SupabaseClient<Database>,
+  id: string,
+): Promise<DocumentoOrdens | null> {
+  const { data: mapa } = await supabase
+    .from('mapas_cotacao')
+    .select('id, titulo, status, cotacao_propria_id, cotacoes_ids')
+    .eq('id', id)
+    .single()
+  if (!mapa) return null
+  const rascunho = mapa.status === 'rascunho'
+
+  const [{ data: escolhas, error }, { data: cotacao }, pedidos, { data: empresa }] = await Promise.all([
+    supabase
+      .from('mapa_cotacao_itens')
+      .select(
+        'insumo_id, cotacao_item_id, quantidade, quantidade_unidade, valor_total, insumo_nome, fornecedor_nome, preco_base, unidade_base, validade, prazo_entrega_dias, prazo_pagamento_dias',
+      )
+      .eq('mapa_id', id),
+    mapa.cotacao_propria_id
+      ? supabase.from('cotacoes_proprias').select('numero').eq('id', mapa.cotacao_propria_id).single()
+      : Promise.resolve({ data: null }),
+    mapa.cotacao_propria_id
+      ? buscarTodos((de, ate) =>
+          supabase
+            .from('cotacao_propria_itens')
+            .select('codigo, nome, teor, quantidade, unidade, insumo_id')
+            .eq('cotacao_propria_id', mapa.cotacao_propria_id!)
+            .order('ordem')
+            .range(de, ate),
+        )
+      : Promise.resolve([] as ProdutoDaCotacao[]),
+    // Sem a linha da empresa, a ordem sai sem o rodapé
+    supabase.from('empresa').select('*').maybeSingle(),
+  ])
+  if (error) throw new Error(error.message)
+
+  const congelada = (e: NonNullable<typeof escolhas>[number]) => !rascunho && e.fornecedor_nome != null && e.preco_base != null
+  const precisaAtual = (escolhas ?? []).some((e) => !congelada(e))
+  const candidatos = new Map(
+    precisaAtual
+      ? (await carregarGruposMapa(supabase, await orcamentosDoMapa(supabase, mapa))).flatMap((g) =>
+          g.candidatos.map((c) => [c.cotacao_item_id, c] as const),
+        )
+      : [],
+  )
+
+  const lista: EscolhaParaOrdem[] = []
+  for (const e of escolhas ?? []) {
+    if (congelada(e)) {
+      lista.push({
+        insumo_id: e.insumo_id,
+        insumo_nome: e.insumo_nome ?? '—',
+        fornecedor: e.fornecedor_nome!,
+        preco_base: e.preco_base,
+        unidade_base: e.unidade_base,
+        validade: e.validade,
+        quantidade: e.quantidade,
+        quantidade_unidade: e.quantidade_unidade,
+        valor_total: e.valor_total,
+        prazo_entrega_dias: e.prazo_entrega_dias,
+        prazo_pagamento_dias: e.prazo_pagamento_dias,
+      })
+      continue
+    }
+    // A oferta escolhida pode ter saído (orçamento excluído): fica de fora
+    const c = e.cotacao_item_id ? candidatos.get(e.cotacao_item_id) : undefined
+    if (!c) continue
+    lista.push({
+      insumo_id: e.insumo_id,
+      insumo_nome: c.insumo_nome,
+      fornecedor: c.fornecedor_nome,
+      preco_base: c.preco_base,
+      unidade_base: c.unidade_base,
+      validade: c.validade,
+      quantidade: e.quantidade,
+      quantidade_unidade: e.quantidade_unidade,
+      valor_total: null,
+      prazo_entrega_dias: c.prazo_entrega_dias,
+      prazo_pagamento_dias: c.prazo_pagamento_dias,
+    })
+  }
+
+  return {
+    mapa: { id: mapa.id, titulo: mapa.titulo, status: mapa.status },
+    rascunho,
+    numero: cotacao?.numero ?? null,
+    ordens: montarOrdens(lista, pedidos),
+    empresa: empresa ?? null,
+  }
 }

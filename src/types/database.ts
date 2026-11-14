@@ -318,6 +318,36 @@ export type Database = {
         }
         Relationships: []
       }
+      empresa: {
+        Row: {
+          cnpj: string | null
+          email: string | null
+          endereco: string | null
+          id: number
+          nome: string
+          telefone: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          cnpj?: string | null
+          email?: string | null
+          endereco?: string | null
+          id?: number
+          nome: string
+          telefone?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          cnpj?: string | null
+          email?: string | null
+          endereco?: string | null
+          id?: number
+          nome?: string
+          telefone?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       fornecedores: {
         Row: {
           ativo: boolean | null

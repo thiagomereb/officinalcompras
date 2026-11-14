@@ -9,7 +9,8 @@ const SINONIMOS_UNIDADE: Record<string, string> = {
   l: 'L', lt: 'L', lts: 'L', litro: 'L', litros: 'L',
   kl: 'kL', quilolitro: 'kL', quilolitros: 'kL',
   mcg: 'mcg', µg: 'mcg', ug: 'mcg', micrograma: 'mcg', microgramas: 'mcg',
-  ui: 'UI', un: 'un', und: 'un', unid: 'un', unidade: 'un', unidades: 'un',
+  // "u" é como o ERP escreve unidade no relatório da cotação e no pedido
+  ui: 'UI', u: 'un', un: 'un', und: 'un', unid: 'un', unidade: 'un', unidades: 'un',
   caps: 'cáps', cáps: 'cáps', capsula: 'cáps', cápsula: 'cáps', capsulas: 'cáps', cápsulas: 'cáps',
   comp: 'comp', comprimido: 'comp', comprimidos: 'comp',
   // Cápsulas vazias são vendidas por milheiro ("5 MIL", "10,000 MI")
@@ -34,6 +35,7 @@ const PARA_BASE: Record<string, { base: string; fator: number }> = {
   mL: { base: 'mL', fator: 1 },
   L: { base: 'mL', fator: 1000 },
   kL: { base: 'mL', fator: 1_000_000 },
+  un: { base: 'un', fator: 1 },
   mil: { base: 'un', fator: 1000 },
 }
 
@@ -68,7 +70,9 @@ export function quantidadeEmBase(quantidade: number, unidade: string | null): { 
 }
 
 // Unidades em que o comprador informa quanto vai comprar no mapa
-export const UNIDADES_QUANTIDADE = ['mg', 'g', 'kg', 'mL', 'L', 'kL'] as const
+// Unidades em que o comprador informa quanto comprar ("un" para cápsulas e
+// outros itens contados)
+export const UNIDADES_QUANTIDADE = ['mg', 'g', 'kg', 'mL', 'L', 'kL', 'un'] as const
 export type UnidadeQuantidade = (typeof UNIDADES_QUANTIDADE)[number]
 
 export function ehUnidadeQuantidade(u: unknown): u is UnidadeQuantidade {

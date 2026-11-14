@@ -174,6 +174,7 @@ export default async function MapaPage({ params }: { params: Promise<{ id: strin
           quantidadesPedidas={pedidas}
           mapaId={id}
           congelado={!rascunho}
+          ordemCompra={mapa.status !== 'cancelado'}
           ultimasCompras={ultimasCompras}
           duplicatasInfo={detectarDuplicatas(grupos, sinonimos)}
           onSalvar={salvarSelecoes}

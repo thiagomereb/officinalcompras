@@ -9,6 +9,7 @@ describe('normalizarUnidade', () => {
     expect(normalizarUnidade('ML')).toBe('mL')
     expect(normalizarUnidade('lts')).toBe('L')
     expect(normalizarUnidade(' cápsulas ')).toBe('cáps')
+    expect(normalizarUnidade('U')).toBe('un')
   })
 
   it('mantém unidades desconhecidas e trata vazio como nulo', () => {

@@ -172,11 +172,12 @@ export function nomeArquivo(prefixo: string, texto: string) {
   return `${prefixo}${slug ? `-${slug}` : ''}.pdf`
 }
 
-export function respostaPdf(pdf: Uint8Array, arquivo: string) {
+// inline: o navegador mostra o PDF (prévia num iframe); attachment: baixa
+export function respostaPdf(pdf: Uint8Array, arquivo: string, disposicao: 'attachment' | 'inline' = 'attachment') {
   return new Response(new Uint8Array(pdf), {
     headers: {
       'Content-Type': 'application/pdf',
-      'Content-Disposition': `attachment; filename="${arquivo}"`,
+      'Content-Disposition': `${disposicao}; filename="${arquivo}"`,
       'Cache-Control': 'no-store',
     },
   })

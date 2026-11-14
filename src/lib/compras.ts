@@ -58,7 +58,7 @@ export function sugestaoDoGrupo(grupo: GrupoInsumo): CandidatoItem | null {
 const centavos = (v: number) => Math.round(v * 100) / 100
 
 // Grandezas em que dá para calcular valor a partir da quantidade comprada
-const BASES_MEDIDAS = ['g', 'mL']
+const BASES_MEDIDAS = ['g', 'mL', 'un']
 
 export type ValorEstimado =
   | { tipo: 'valor'; valor: number }
@@ -73,7 +73,7 @@ export function valorEstimado(
   unidade: UnidadeQuantidade | null,
 ): ValorEstimado {
   if (quantidade == null || !(quantidade > 0) || !unidade) return { tipo: 'sem_quantidade' }
-  // Oferta vendida por unidade, cápsula etc.: não há como converter de g/mL
+  // Oferta em unidade que não se converte (cáps, UI...): não há como calcular
   if (!candidato.unidade_base || !BASES_MEDIDAS.includes(candidato.unidade_base)) return { tipo: 'sem_conversao' }
   const q = quantidadeNaBase(quantidade, unidade)
   if (q.base !== candidato.unidade_base) return { tipo: 'grandeza_diferente', base: candidato.unidade_base }
