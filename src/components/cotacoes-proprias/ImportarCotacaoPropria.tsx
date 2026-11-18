@@ -142,6 +142,19 @@ export function ImportarCotacaoPropria({ action }: Props) {
             <span className="selo selo-ok">{lida.itens.length} produtos lidos</span>
           </div>
 
+          {lida.avisos.length > 0 && (
+            <div className="aviso aviso-atencao mx-5 mt-4" role="status">
+              <span>
+                <span className="font-medium">Confira antes de importar:</span>
+                <ul className="mt-1 list-disc space-y-0.5 pl-4">
+                  {lida.avisos.map((a) => (
+                    <li key={a}>{a}</li>
+                  ))}
+                </ul>
+              </span>
+            </div>
+          )}
+
           <div className="overflow-x-auto">
             <table className="tabela tabela-compacta whitespace-nowrap">
               <thead>

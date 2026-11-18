@@ -84,12 +84,47 @@ describe('lerCotacaoPropria', () => {
     expect(r).toEqual({ ok: false, erro: expect.stringContaining('Li 5 produto(s), mas o relatório diz 6') })
   })
 
-  it('recusa outro tipo de PDF e código repetido', () => {
+  it('recusa outro tipo de PDF', () => {
     expect(lerCotacaoPropria(['TABELA DE PREÇOS', ...itens]).ok).toBe(false)
-    expect(lerCotacaoPropria([...cabecalho, itens[0], itens[0]])).toEqual({
+  })
+
+  it('aponta as linhas que não leu quando o total não bate', () => {
+    const r = lerCotacaoPropria([...cabecalho, itens[0], '0000001000001 1000001 - PRODUTO SEM QUANTIDADE', 'TOTAL DE PRODUTOS: 2'])
+    expect(r).toEqual({
       ok: false,
-      erro: 'O produto 1004426 aparece duas vezes no relatório.',
+      erro: 'Li 1 produto(s), mas o relatório diz 2. Linha(s) que não consegui ler: "0000001000001 1000001 - PRODUTO SEM QUANTIDADE".',
     })
+  })
+
+  it('EAN curto, produto repetido somado e teor impossível', () => {
+    const linhas = [
+      '0047 1000005 - PARACETAMOL EXEMPLO (DC 90) [100.0000 %] 1.000,0000 g',
+      '0000004000035 4000035 - CAPSULA Nº 00 1G (AZUL / BRANCA) 10.000,0000 u',
+      '0000001005932 1005932 - PRODUTO EXEMPLO (USO INTERNO) [50100.0000 %] 50,0000 g',
+      '0000004000035 4000035 - CAPSULA Nº 00 1G (AZUL / BRANCA) 20.000,0000 u',
+    ]
+    // O rodapé conta as 4 linhas, mesmo com o produto repetido
+    const r = lerCotacaoPropria([...cabecalho, ...linhas, 'TOTAL DE PRODUTOS:4'])
+    expect(r.ok).toBe(true)
+    if (!r.ok) return
+    expect(r.cotacao.itens.map((i) => [i.codigo, i.ean, i.teor, i.quantidade, i.unidade])).toEqual([
+      ['1000005', '0047', 100, 1000, 'g'],
+      ['4000035', '0000004000035', null, 30000, 'un'],
+      ['1005932', '0000001005932', null, 50, 'g'],
+    ])
+    expect(r.cotacao.avisos).toEqual([
+      '1005932 - PRODUTO EXEMPLO (USO INTERNO): teor "50100.0000 %" no sistema; entra sem teor.',
+      '4000035 - CAPSULA Nº 00 1G (AZUL / BRANCA) aparece 2 vezes: quantidades somadas (10.000 + 20.000 = 30.000 un).',
+    ])
+  })
+
+  it('recusa produto repetido em unidades diferentes', () => {
+    const r = lerCotacaoPropria([
+      ...cabecalho,
+      '0000004000035 4000035 - CAPSULA EXEMPLO 10.000,0000 u',
+      '0000004000035 4000035 - CAPSULA EXEMPLO 10,0000 g',
+    ])
+    expect(r).toEqual({ ok: false, erro: expect.stringContaining('em unidades diferentes (un e g)') })
   })
 })
 
