@@ -33,7 +33,8 @@ function itensValidos(itens: unknown): ItemCotacaoPropria[] | Falha {
     const quantidade = Number(i.quantidade)
 
     if (!codigo || !/^\d+$/.test(codigo) || !nome || !unidade) return { erro: 'Produto inválido na cotação.' }
-    if (i.ean != null && (!ean || !/^\d+$/.test(ean))) return { erro: `EAN inválido no produto ${codigo}.` }
+    // O relatório traz EAN com letras em alguns produtos ("G60CS000354I")
+    if (i.ean != null && (!ean || !/^[0-9A-Z]+$/i.test(ean))) return { erro: `EAN inválido no produto ${codigo}.` }
     if (teor != null && !(teor >= 0 && teor <= 100)) return { erro: `Teor inválido no produto ${codigo}.` }
     if (!Number.isFinite(quantidade) || quantidade < 0) return { erro: `Quantidade inválida no produto ${codigo}.` }
     if (codigos.has(codigo)) return { erro: `O produto ${codigo} aparece duas vezes.` }

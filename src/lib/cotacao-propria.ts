@@ -7,6 +7,7 @@ import { normalizarUnidade } from './unidades'
 //   0000001004426  1004426 - 3 INDOL CARBINOL [100.0000 %]   12,0920 g
 //   EAN            código  - nome             [teor]          quantidade unidade
 //
+// (nos produtos acabados vem ainda a fração C/V, "1/ 1", antes da quantidade)
 // e o rodapé "TOTAL DE PRODUTOS: 307" confere se nenhuma linha ficou de fora.
 
 export type ItemCotacaoPropria = {
@@ -16,6 +17,8 @@ export type ItemCotacaoPropria = {
   teor: number | null
   quantidade: number
   unidade: string
+  // Coluna OBSERVAÇÃO do relatório (ex.: "URGENTE")
+  observacao?: string | null
 }
 
 export type CotacaoPropriaLida = {
@@ -28,10 +31,17 @@ export type CotacaoPropriaLida = {
 
 export type LeituraCotacaoPropria = { ok: true; cotacao: CotacaoPropriaLida } | { ok: false; erro: string }
 
-const LINHA_ITEM = /^(SEM GTIN|\d{8,14})\s+(\d{3,15})\s+-\s+(.+?)\s+(\d{1,3}(?:\.\d{3})*,\d+|\d+,\d+|\d+)\s+([A-Za-zµÁ-úçÇ.]+)$/
+// EAN pode ter letras ("G60CS000354I"); depois da unidade pode vir a coluna
+// OBSERVAÇÃO ("URGENTE"). O nome é guloso para a quantidade ser a última da
+// linha, não um número do nome ("1,5% WITANOLIDEOS").
+const LINHA_ITEM =
+  /^(SEM GTIN|[0-9A-Z]{8,14})\s+(\d{3,15})\s+-\s+(.+)\s+(\d{1,3}(?:\.\d{3})*,\d+|\d+,\d+|\d+)\s+([A-Za-zµÁ-úçÇ.]+)(?:\s+(.+?))?$/
 const TEOR = /\s*\[(\d+(?:\.\d+)?)\s*%\]\s*$/
 // Colchete do teor cortado pelo próprio relatório em nomes longos
 const TEOR_CORTADO = /\s*\[[^\]]*$/
+// Coluna FRAÇÃO C/V ("1/ 1", "0/ 0"): vazia nas matérias-primas, preenchida nos
+// produtos acabados; colada no fim do nome quando ele é cortado ("OFFICINAL1/ 1")
+const FRACAO = /\s*\d+\/\s+\d+$/
 
 function numeroBR(texto: string): number {
   return Number(texto.replace(/\./g, '').replace(',', '.'))
@@ -40,9 +50,9 @@ function numeroBR(texto: string): number {
 function itemDaLinha(linha: string): ItemCotacaoPropria | null {
   const m = LINHA_ITEM.exec(linha)
   if (!m) return null
-  const [, ean, codigo, nomeComTeor, quantidade, unidade] = m
+  const [, ean, codigo, nomeComTeor, quantidade, unidade, observacao] = m
 
-  let nome = nomeComTeor
+  let nome = nomeComTeor.replace(FRACAO, '')
   let teor: number | null = null
   const t = TEOR.exec(nome)
   if (t) {
@@ -59,6 +69,7 @@ function itemDaLinha(linha: string): ItemCotacaoPropria | null {
     teor,
     quantidade: numeroBR(quantidade),
     unidade: normalizarUnidade(unidade) ?? unidade,
+    observacao: observacao?.trim() || null,
   }
 }
 
