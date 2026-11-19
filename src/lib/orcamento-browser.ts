@@ -90,7 +90,8 @@ async function paginasDaPlanilha(dados: ArrayBuffer): Promise<Pagina[]> {
 }
 
 class ErroLeitura extends Error {
-  constructor(message: string, readonly esperarS: number | null = null) {
+  // reserva: a função pediu que a próxima tentativa vá direto para a IA reserva
+  constructor(message: string, readonly esperarS: number | null = null, readonly reserva = false) {
     super(message)
   }
 }
@@ -99,16 +100,17 @@ async function chamarLeitura(body: Record<string, unknown>): Promise<Record<stri
   const { data, error } = await createClient().functions.invoke('ler-orcamento', { body })
   if (error) {
     const resp = (error as { context?: Response }).context
-    const corpo = (await resp?.json?.().catch(() => null)) as { error?: string; retry_after?: number } | null
+    const corpo = (await resp?.json?.().catch(() => null)) as { error?: string; retry_after?: number; reserva?: boolean } | null
+    const reserva = corpo?.reserva === true
     const status = resp?.status ?? 0
     if (STATUS_TROCA.has(status)) throw new ErroLeitura('A leitura desta página foi interrompida.', ESPERA_TROCA_S)
     if (status === 429 || status === 503) {
       // O tempo vem no corpo; o cabeçalho só é visível se a função o expuser
       const informado = Number(corpo?.retry_after ?? resp?.headers.get('Retry-After') ?? NaN)
       const espera = Number.isFinite(informado) && informado > 0 ? informado : ESPERA_PADRAO_S[status]
-      throw new ErroLeitura(corpo?.error ?? error.message, espera)
+      throw new ErroLeitura(corpo?.error ?? error.message, espera, reserva)
     }
-    throw new ErroLeitura(corpo?.error ?? error.message)
+    throw new ErroLeitura(corpo?.error ?? error.message, null, reserva)
   }
   if (data?.error) throw new ErroLeitura(data.error)
   return data as Record<string, unknown>
@@ -141,10 +143,15 @@ async function lerPagina(
     const qual = total > 1 ? `a página ${n} de ${total}` : 'o orçamento'
     for (let tentativa = 1; ; tentativa++) {
       if (!continuar()) throw new LeituraCancelada()
-      if (tentativa > 1) progresso?.(`Lendo ${qual} (tentativa ${tentativa} de ${MAX_TENTATIVAS})…`, etapa)
+      if (tentativa > 1) {
+        const via = corpo.reserva ? ' pela IA reserva' : ''
+        progresso?.(`Lendo ${qual}${via} (tentativa ${tentativa} de ${MAX_TENTATIVAS})…`, etapa)
+      }
       try {
         return await chamarLeitura(corpo)
       } catch (e) {
+        // Uma vez na reserva, as próximas tentativas desta página continuam nela
+        if (e instanceof ErroLeitura && e.reserva) corpo.reserva = true
         const pedida = e instanceof ErroLeitura ? e.esperarS : null
         if (pedida == null || pedida > MAX_ESPERA_S || tentativa >= MAX_TENTATIVAS) throw e
         // Com a IA sobrecarregada, cada nova tentativa espera um pouco mais

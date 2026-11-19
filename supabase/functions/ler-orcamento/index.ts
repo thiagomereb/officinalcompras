@@ -14,11 +14,21 @@ import { createClient } from 'npm:@supabase/supabase-js@2.105.4'
 // o 3.1-flash-lite pulou itens quando também tinha de vincular, por isso não
 // entra como reserva. Uma página por chamada mantém cada uma bem abaixo dos
 // 150s da Edge Function.
+//
+// Reserva: se o Gemini estiver sobrecarregado, sem cota ou não responder, a
+// mesma página vai para a OpenAI (secret OPENAI_API_KEY), com as mesmas
+// instruções e o mesmo formato de resposta. Sem o secret, não há reserva.
 
 const MODELO = 'gemini-3.5-flash'
 // Uma página leva 20–60s; com a IA sobrecarregada passa de 100s. Cabe nos 150s
 // do worker (a conta da vida dele abaixo corta antes, se for preciso).
 const GEMINI_TIMEOUT_MS = 130_000
+// Com reserva, desiste do Gemini antes, para sobrar tempo para ela
+const GEMINI_TIMEOUT_COM_RESERVA_MS = 90_000
+const OPENAI_MODELO = Deno.env.get('OPENAI_MODEL') || 'gpt-6.2-sol'
+const OPENAI_TIMEOUT_MS = 120_000
+// Com menos vida que isso no worker, a reserva fica para a próxima tentativa
+const MINIMO_RESERVA_MS = 35_000
 // Uma repetição rápida para um soluço da IA; alta demanda mais longa quem
 // espera é o navegador (Retry-After), fora do relógio da função
 const GEMINI_MAX_RETRIES = 1
@@ -110,9 +120,12 @@ function jsonResponse(body: unknown, status = 200, extra: Record<string, string>
   })
 }
 
-// Peça para o navegador tentar de novo daqui a tantos segundos
-function tenteDepois(error: string, status: number, segundos: number) {
-  return jsonResponse({ error, retry_after: segundos }, status, { 'Retry-After': String(segundos) })
+// Peça para o navegador tentar de novo daqui a tantos segundos. reserva: a
+// próxima tentativa desta página deve ir direto para a IA reserva.
+function tenteDepois(error: string, status: number, segundos: number, reserva = false) {
+  return jsonResponse({ error, retry_after: segundos, ...(reserva ? { reserva: true } : {}) }, status, {
+    'Retry-After': String(segundos),
+  })
 }
 
 function vidaRestante(): number {
@@ -173,10 +186,10 @@ function validarImagemUrl(urlStr: unknown, supabaseUrl: string): string | null {
   }
 }
 
-async function chamarGemini(apiKey: string, body: string, tentativa = 1): Promise<Response> {
-  const limite = Math.min(GEMINI_TIMEOUT_MS, vidaRestante())
+async function chamarGemini(apiKey: string, body: string, timeoutMs: number, tentativa = 1): Promise<Response> {
+  const limite = Math.min(timeoutMs, vidaRestante())
   if (limite < MINIMO_PARA_LER_MS) throw new TempoDoWorker()
-  const porTempoDoWorker = limite < GEMINI_TIMEOUT_MS
+  const porTempoDoWorker = limite < timeoutMs
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), limite)
   let resp: Response
@@ -202,7 +215,7 @@ async function chamarGemini(apiKey: string, body: string, tentativa = 1): Promis
     const atraso = 2000 + Math.random() * 1000
     console.warn(`[ler-orcamento] status ${resp.status}, tentativa ${tentativa}, aguardando ${Math.round(atraso)}ms`)
     await new Promise((r) => setTimeout(r, atraso))
-    return chamarGemini(apiKey, body, tentativa + 1)
+    return chamarGemini(apiKey, body, timeoutMs, tentativa + 1)
   }
   return resp
 }
@@ -214,10 +227,140 @@ function base64(buffer: ArrayBuffer): string {
   return btoa(binario)
 }
 
+// O que vai para a IA: a lista de produtos pedidos e a página (texto ou imagem)
+type PaginaParaLer = { pedidos: string; texto: string | null; imagem: { tipo: string; base64: string } | null }
+
+// ok: o JSON lido. Senão, por que a IA não leu (quem decide o que fazer é quem chamou)
+type Leitura =
+  | { ok: true; json: string; uso: string }
+  | { ok: false; motivo: 'sobrecarga' | 'cota' | 'demora' | 'grande'; mensagem: string }
+
+async function lerComGemini(apiKey: string, pagina: PaginaParaLer, timeoutMs: number): Promise<Leitura> {
+  const partes: unknown[] = [{ text: pagina.pedidos }]
+  partes.push(pagina.texto != null ? { text: pagina.texto } : { inline_data: { mime_type: pagina.imagem!.tipo, data: pagina.imagem!.base64 } })
+
+  let resp: Response
+  try {
+    resp = await chamarGemini(apiKey, JSON.stringify({
+      systemInstruction: { parts: [{ text: INSTRUCOES }] },
+      contents: [{ role: 'user', parts: partes }],
+      generationConfig: { temperature: 0, responseMimeType: 'application/json', responseSchema: SCHEMA },
+    }), timeoutMs)
+  } catch (err) {
+    if (err instanceof IaDemorou) {
+      return { ok: false, motivo: 'demora', mensagem: `A IA está sobrecarregada (não respondeu em ${timeoutMs / 1000}s).` }
+    }
+    throw err
+  }
+
+  if (!resp.ok) {
+    const corpo = await resp.json().catch(() => ({ error: { message: '' } }))
+    const msg = corpo?.error?.message ?? ''
+    if (resp.status === 429) return { ok: false, motivo: 'cota', mensagem: classify429(msg) }
+    if (resp.status === 503 || resp.status === 529) return { ok: false, motivo: 'sobrecarga', mensagem: 'A IA está com alta demanda agora.' }
+    throw new Error(msg || `Gemini retornou status ${resp.status}`)
+  }
+
+  const dados = await resp.json()
+  const candidato = dados?.candidates?.[0]
+  const u = dados?.usageMetadata ?? {}
+  const uso = `${MODELO} | finish=${candidato?.finishReason} | in=${u.promptTokenCount} out=${u.candidatesTokenCount} thoughts=${u.thoughtsTokenCount ?? 0}`
+  if (candidato?.finishReason === 'MAX_TOKENS') return { ok: false, motivo: 'grande', mensagem: uso }
+  const json = candidato?.content?.parts?.map((p: { text?: string }) => p.text ?? '').join('')
+  if (!json) throw new Error('A IA não devolveu resposta.')
+  return { ok: true, json, uso }
+}
+
+// O esquema do Gemini no formato JSON Schema estrito da OpenAI: todo campo
+// obrigatório, nulo como tipo, nenhum campo além dos definidos
+type EsquemaGemini = { type: string; nullable?: boolean; properties?: Record<string, EsquemaGemini>; items?: EsquemaGemini }
+function esquemaEstrito(s: EsquemaGemini): Record<string, unknown> {
+  const tipo = s.type.toLowerCase()
+  if (tipo === 'object') {
+    const props = Object.fromEntries(Object.entries(s.properties ?? {}).map(([k, v]) => [k, esquemaEstrito(v)]))
+    return { type: 'object', properties: props, required: Object.keys(props), additionalProperties: false }
+  }
+  if (tipo === 'array') return { type: 'array', items: esquemaEstrito(s.items!) }
+  return { type: s.nullable ? [tipo, 'null'] : tipo }
+}
+const SCHEMA_OPENAI = esquemaEstrito(SCHEMA as EsquemaGemini)
+
+async function lerComOpenAI(apiKey: string, pagina: PaginaParaLer): Promise<Leitura> {
+  const limite = Math.min(OPENAI_TIMEOUT_MS, vidaRestante())
+  if (limite < MINIMO_PARA_LER_MS) throw new TempoDoWorker()
+  const porTempoDoWorker = limite < OPENAI_TIMEOUT_MS
+  const conteudo: unknown[] = [{ type: 'input_text', text: pagina.pedidos }]
+  conteudo.push(
+    pagina.texto != null
+      ? { type: 'input_text', text: pagina.texto }
+      : { type: 'input_image', image_url: `data:${pagina.imagem!.tipo};base64,${pagina.imagem!.base64}`, detail: 'high' },
+  )
+
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), limite)
+  let resp: Response
+  try {
+    resp = await fetch('https://api.openai.com/v1/responses', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({
+        model: OPENAI_MODELO,
+        reasoning: { effort: 'low' },
+        input: [
+          { role: 'system', content: INSTRUCOES },
+          { role: 'user', content: conteudo },
+        ],
+        text: { format: { type: 'json_schema', name: 'orcamento', schema: SCHEMA_OPENAI, strict: true } },
+        max_output_tokens: 32_000,
+      }),
+      signal: controller.signal,
+    })
+  } catch (err) {
+    clearTimeout(timeout)
+    if ((err as Error).name === 'AbortError') {
+      if (porTempoDoWorker) throw new TempoDoWorker()
+      return { ok: false, motivo: 'demora', mensagem: `A IA reserva não respondeu em ${OPENAI_TIMEOUT_MS / 1000}s.` }
+    }
+    throw err
+  }
+  clearTimeout(timeout)
+
+  if (!resp.ok) {
+    const corpo = await resp.json().catch(() => null)
+    const erro = corpo?.error ?? {}
+    if (resp.status === 401) throw new Error('Chave da OpenAI inválida (secret OPENAI_API_KEY).')
+    if (resp.status === 429) {
+      const semCredito = erro.code === 'credit_balance_exhausted' || erro.type === 'insufficient_quota'
+      return { ok: false, motivo: 'cota', mensagem: semCredito ? 'Créditos da OpenAI esgotados.' : 'Limite da IA reserva atingido. Aguarde 1 minuto.' }
+    }
+    if (resp.status >= 500) return { ok: false, motivo: 'sobrecarga', mensagem: 'A IA reserva também está com alta demanda.' }
+    throw new Error(erro.message || `OpenAI retornou status ${resp.status}`)
+  }
+
+  const dados = await resp.json()
+  const u = dados?.usage ?? {}
+  const uso = `${OPENAI_MODELO} | status=${dados?.status} | in=${u.input_tokens} out=${u.output_tokens} reasoning=${u.output_tokens_details?.reasoning_tokens ?? 0}`
+  if (dados?.status === 'incomplete' && dados?.incomplete_details?.reason === 'max_output_tokens') {
+    return { ok: false, motivo: 'grande', mensagem: uso }
+  }
+  let json = ''
+  for (const item of dados?.output ?? []) {
+    if (item?.type !== 'message') continue
+    for (const parte of item.content ?? []) {
+      if (parte?.type === 'refusal') throw new Error('A IA reserva recusou ler esta página.')
+      if (parte?.type === 'output_text') json += parte.text ?? ''
+    }
+  }
+  if (!json) throw new Error('A IA reserva não devolveu resposta.')
+  return { ok: true, json, uso }
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: CORS_HEADERS })
 
   const inicio = Date.now()
+  // A página está sendo lida pela reserva: se for adiada, continua nela
+  let usandoReserva = false
   try {
     const apiKey = Deno.env.get('GEMINI_API_KEY')
     if (!apiKey) return jsonResponse({ error: 'Secret GEMINI_API_KEY não configurado.' }, 500)
@@ -230,7 +373,7 @@ Deno.serve(async (req) => {
     const { data: auth } = token ? await supabase.auth.getUser(token) : { data: { user: null } }
     if (!auth.user) return jsonResponse({ error: 'Sessão expirada. Entre novamente no sistema.' }, 401)
 
-    const { cotacao_propria_id, pagina, total_paginas, texto, imagem_url, imagem_tipo } = await req.json()
+    const { cotacao_propria_id, pagina: numeroPagina, total_paginas, texto, imagem_url, imagem_tipo, reserva } = await req.json()
     if (typeof cotacao_propria_id !== 'string' || !/^[0-9a-f-]{36}$/i.test(cotacao_propria_id)) {
       return jsonResponse({ error: 'cotacao_propria_id inválido.' }, 400)
     }
@@ -281,48 +424,56 @@ Deno.serve(async (req) => {
         return `${p.codigo} | ${p.nome}${teor}${sins.length ? ` | também: ${sins.join('; ')}` : ''}`
       })
       .join('\n')
-    const cabecalhoPagina = `ORÇAMENTO — página ${Number(pagina) || 1} de ${Number(total_paginas) || 1}`
+    const cabecalhoPagina = `ORÇAMENTO — página ${Number(numeroPagina) || 1} de ${Number(total_paginas) || 1}`
 
-    const partes: unknown[] = [{ text: `PRODUTOS PEDIDOS\n${lista}\n\n${cabecalhoPagina}` }]
-    if (temTexto) {
-      partes.push({ text: texto })
-    } else {
+    const pagina: PaginaParaLer = {
+      pedidos: `PRODUTOS PEDIDOS\n${lista}\n\n${cabecalhoPagina}`,
+      texto: temTexto ? texto : null,
+      imagem: null,
+    }
+    if (!temTexto) {
       const img = await fetch(imagemUrl!)
       if (!img.ok) throw new Error(`Não foi possível baixar a imagem: ${img.status}`)
       const buffer = await img.arrayBuffer()
       if (buffer.byteLength > MAX_IMAGEM_BYTES) return jsonResponse({ error: 'Imagem acima de 5 MB.' }, 400)
       const tipo = ['image/jpeg', 'image/png', 'image/webp'].includes(imagem_tipo) ? imagem_tipo : 'image/jpeg'
-      partes.push({ inline_data: { mime_type: tipo, data: base64(buffer) } })
+      pagina.imagem = { tipo, base64: base64(buffer) }
     }
 
-    const resp = await chamarGemini(apiKey, JSON.stringify({
-      systemInstruction: { parts: [{ text: INSTRUCOES }] },
-      contents: [{ role: 'user', parts: partes }],
-      generationConfig: { temperature: 0, responseMimeType: 'application/json', responseSchema: SCHEMA },
-    }))
-
-    if (!resp.ok) {
-      const corpo = await resp.json().catch(() => ({ error: { message: '' } }))
-      const msg = corpo?.error?.message ?? ''
-      if (resp.status === 429) return tenteDepois(classify429(msg), 429, 60)
-      if (resp.status === 503 || resp.status === 529) return tenteDepois('A IA está com alta demanda agora.', 503, 20)
-      throw new Error(msg || `Gemini retornou status ${resp.status}`)
+    // Gemini primeiro; se ele falhar, a reserva (OpenAI). Página que já caiu
+    // na reserva numa tentativa anterior vai direto para ela.
+    const openaiKey = Deno.env.get('OPENAI_API_KEY') || null
+    let leitura: Leitura
+    if (reserva === true && openaiKey) {
+      usandoReserva = true
+      leitura = await lerComOpenAI(openaiKey, pagina)
+    } else {
+      leitura = await lerComGemini(apiKey, pagina, openaiKey ? GEMINI_TIMEOUT_COM_RESERVA_MS : GEMINI_TIMEOUT_MS)
+      if (!leitura.ok && leitura.motivo !== 'grande' && openaiKey) {
+        if (vidaRestante() < MINIMO_RESERVA_MS) {
+          console.warn(`[ler-orcamento] gemini: ${leitura.motivo}; reserva na próxima tentativa (worker ${Math.round((Date.now() - INICIO_WORKER) / 1000)}s)`)
+          return tenteDepois(`${leitura.mensagem} Lendo pela IA reserva…`, 503, esperaPeloWorker(), true)
+        }
+        console.warn(`[ler-orcamento] gemini: ${leitura.motivo}; lendo pela reserva (${OPENAI_MODELO})`)
+        usandoReserva = true
+        leitura = await lerComOpenAI(openaiKey, pagina)
+      }
     }
 
-    const dados = await resp.json()
     const segundos = ((Date.now() - inicio) / 1000).toFixed(1)
-    const candidato = dados?.candidates?.[0]
-    const usage = dados?.usageMetadata ?? {}
-    console.log(`[ler-orcamento] ${cabecalhoPagina} | ${temTexto ? 'texto' : 'imagem'} | ${segundos}s | worker ${Math.round((Date.now() - INICIO_WORKER) / 1000)}s | finish=${candidato?.finishReason} | in=${usage.promptTokenCount} out=${usage.candidatesTokenCount} thoughts=${usage.thoughtsTokenCount ?? 0}`)
-    if (candidato?.finishReason === 'MAX_TOKENS') {
-      return jsonResponse({ error: 'Página com itens demais para uma leitura. Divida o arquivo.' }, 422)
+    if (!leitura.ok) {
+      console.warn(`[ler-orcamento] ${cabecalhoPagina} | ${segundos}s | ${usandoReserva ? 'reserva' : 'gemini'} não leu: ${leitura.motivo}`)
+      if (leitura.motivo === 'grande') {
+        return jsonResponse({ error: 'Página com itens demais para uma leitura. Divida o arquivo.' }, 422)
+      }
+      if (leitura.motivo === 'cota') return tenteDepois(leitura.mensagem, 429, 60, usandoReserva)
+      return tenteDepois(leitura.mensagem, 503, leitura.motivo === 'demora' ? 15 : 20, usandoReserva)
     }
-    const conteudo = candidato?.content?.parts?.map((p: { text?: string }) => p.text ?? '').join('')
-    if (!conteudo) throw new Error('A IA não devolveu resposta.')
+    console.log(`[ler-orcamento] ${cabecalhoPagina} | ${temTexto ? 'texto' : 'imagem'} | ${segundos}s | worker ${Math.round((Date.now() - INICIO_WORKER) / 1000)}s | ${leitura.uso}`)
 
     let lido: { itens?: unknown[] } & Record<string, unknown>
     try {
-      lido = JSON.parse(conteudo)
+      lido = JSON.parse(leitura.json)
     } catch {
       throw new Error('A IA devolveu uma resposta em formato inválido. Tente de novo.')
     }
@@ -335,15 +486,12 @@ Deno.serve(async (req) => {
         Number(i.embalagem_quantidade) > 0 && Number(i.quantidade_embalagens) > 0)
       .map((i) => ({ ...i, codigo_pedido: codigos.has(String(i.codigo_pedido)) ? String(i.codigo_pedido) : null }))
 
-    return jsonResponse({ ...lido, itens })
+    // ia: quem leu a página (o navegador pode avisar quando foi a reserva)
+    return jsonResponse({ ...lido, itens, ia: usandoReserva ? OPENAI_MODELO : MODELO })
   } catch (err) {
     if (err instanceof TempoDoWorker) {
       console.warn(`[ler-orcamento] worker no fim da vida (${Math.round((Date.now() - INICIO_WORKER) / 1000)}s), página adiada`)
-      return tenteDepois('Reiniciando a leitura…', 503, esperaPeloWorker())
-    }
-    if (err instanceof IaDemorou) {
-      console.warn(`[ler-orcamento] a IA não respondeu em ${GEMINI_TIMEOUT_MS / 1000}s, página adiada`)
-      return tenteDepois(`A IA está sobrecarregada (não respondeu em ${GEMINI_TIMEOUT_MS / 1000}s).`, 503, 15)
+      return tenteDepois('Reiniciando a leitura…', 503, esperaPeloWorker(), usandoReserva)
     }
     const msg = err instanceof Error ? err.message : 'Erro inesperado.'
     console.error(`[ler-orcamento] erro: ${msg}`)
