@@ -16,7 +16,9 @@ import { createClient } from 'npm:@supabase/supabase-js@2.105.4'
 // 150s da Edge Function.
 
 const MODELO = 'gemini-3.5-flash'
-const GEMINI_TIMEOUT_MS = 110_000
+// Uma página leva 20–60s; com a IA sobrecarregada passa de 100s. Cabe nos 150s
+// do worker (a conta da vida dele abaixo corta antes, se for preciso).
+const GEMINI_TIMEOUT_MS = 130_000
 // Uma repetição rápida para um soluço da IA; alta demanda mais longa quem
 // espera é o navegador (Retry-After), fora do relógio da função
 const GEMINI_MAX_RETRIES = 1
@@ -124,6 +126,8 @@ function vidaRestante(): number {
 const esperaPeloWorker = () => Math.max(1, Math.ceil(vidaRestante() / 1000) + FOLGA_WORKER_MS / 1000 + 2)
 
 class TempoDoWorker extends Error {}
+// A IA não respondeu no tempo: é sobrecarga dela, o navegador tenta de novo
+class IaDemorou extends Error {}
 
 function classify429(message: string): string {
   const msg = message.toLowerCase()
@@ -187,7 +191,7 @@ async function chamarGemini(apiKey: string, body: string, tentativa = 1): Promis
     clearTimeout(timeout)
     if ((err as Error).name === 'AbortError') {
       if (porTempoDoWorker) throw new TempoDoWorker()
-      throw new Error(`A IA não respondeu em ${GEMINI_TIMEOUT_MS / 1000}s.`)
+      throw new IaDemorou()
     }
     throw err
   }
@@ -336,6 +340,10 @@ Deno.serve(async (req) => {
     if (err instanceof TempoDoWorker) {
       console.warn(`[ler-orcamento] worker no fim da vida (${Math.round((Date.now() - INICIO_WORKER) / 1000)}s), página adiada`)
       return tenteDepois('Reiniciando a leitura…', 503, esperaPeloWorker())
+    }
+    if (err instanceof IaDemorou) {
+      console.warn(`[ler-orcamento] a IA não respondeu em ${GEMINI_TIMEOUT_MS / 1000}s, página adiada`)
+      return tenteDepois(`A IA está sobrecarregada (não respondeu em ${GEMINI_TIMEOUT_MS / 1000}s).`, 503, 15)
     }
     const msg = err instanceof Error ? err.message : 'Erro inesperado.'
     console.error(`[ler-orcamento] erro: ${msg}`)
