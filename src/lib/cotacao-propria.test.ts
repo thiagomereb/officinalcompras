@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { lerCotacaoPropria, linhasDaPagina } from './cotacao-propria'
+import {
+  concluirCotacaoPropria,
+  conferirLeituraIa,
+  lerCotacaoPropria,
+  lerLinhasCotacaoPropria,
+  linhasDaPagina,
+  linhasParaIa,
+  type LeituraParcial,
+} from './cotacao-propria'
 
 // Linhas como saem de linhasDaPagina para o relatório do sistema (dados fictícios)
 const cabecalho = [
@@ -125,6 +133,92 @@ describe('lerCotacaoPropria', () => {
       '0000004000035 4000035 - CAPSULA EXEMPLO 10,0000 g',
     ])
     expect(r).toEqual({ ok: false, erro: expect.stringContaining('em unidades diferentes (un e g)') })
+  })
+})
+
+// Linhas fora do padrão (dados fictícios): sem o hífen, quantidade colada na
+// unidade, quantidade na linha de baixo
+const semHifen = '0000001000011 1000011 PRODUTO SEM HIFEN [98.5000 %] 250,0000 g'
+const colada = 'SEM GTIN 1000012 - PRODUTO COLADO 1.500,0000g URGENTE'
+const quebrada = '0000001000013 1000013 - PRODUTO DE NOME MUITO LONGO QUE'
+const continuacao = 'CONTINUA EMBAIXO 2,5000 kg'
+
+function parcialCom(linhas: string[]): LeituraParcial {
+  const r = lerLinhasCotacaoPropria([...cabecalho, ...linhas])
+  if (!r.ok) throw new Error(r.erro)
+  return r.parcial
+}
+
+describe('leitura das linhas fora do padrão pela IA', () => {
+  it('manda para a IA só quando falta produto para fechar com o rodapé', () => {
+    const p = parcialCom([itens[0], semHifen, colada, quebrada, continuacao, 'TOTAL DE PRODUTOS: 4'])
+    expect(linhasParaIa(p)).toEqual([
+      { texto: semHifen, continuacao: null },
+      { texto: colada, continuacao: null },
+      { texto: quebrada, continuacao: continuacao },
+    ])
+    // Total já fechado: o que sobrou não é produto
+    expect(linhasParaIa(parcialCom([itens[0], semHifen, 'TOTAL DE PRODUTOS: 1']))).toEqual([])
+  })
+
+  it('aceita o que está escrito na linha', () => {
+    const [a, b, c] = linhasParaIa(parcialCom([semHifen, colada, quebrada, continuacao, 'TOTAL DE PRODUTOS: 3']))
+    expect(
+      conferirLeituraIa(a, { codigo: '1000011', ean: '0000001000011', nome: 'PRODUTO SEM HIFEN', teor: 98.5, quantidade: 250, unidade: 'g', observacao: null })?.item,
+    ).toEqual({ codigo: '1000011', ean: '0000001000011', nome: 'PRODUTO SEM HIFEN', teor: 98.5, quantidade: 250, unidade: 'g', observacao: null })
+    expect(
+      conferirLeituraIa(b, { codigo: '1000012', ean: null, nome: 'PRODUTO COLADO', teor: null, quantidade: 1500, unidade: 'g', observacao: 'URGENTE' })?.item,
+    ).toMatchObject({ quantidade: 1500, unidade: 'g', observacao: 'URGENTE' })
+    // Unidade antes da quantidade
+    const invertida = { texto: '0000001000014 1000014 - PRODUTO INVERTIDO g 500,0000', continuacao: null }
+    expect(
+      conferirLeituraIa(invertida, { codigo: '1000014', ean: null, nome: 'PRODUTO INVERTIDO', teor: null, quantidade: 500, unidade: 'g', observacao: null })?.item,
+    ).toMatchObject({ quantidade: 500, unidade: 'g' })
+    expect(conferirLeituraIa(invertida, { codigo: '1000014', ean: null, nome: 'PRODUTO INVERTIDO', teor: null, quantidade: 500.5, unidade: 'g', observacao: null })).toBeNull()
+    // Nome e quantidade na linha de baixo
+    expect(
+      conferirLeituraIa(c, { codigo: '1000013', ean: '0000001000013', nome: 'PRODUTO DE NOME MUITO LONGO QUE CONTINUA EMBAIXO', teor: null, quantidade: 2.5, unidade: 'kg', observacao: null })?.item,
+    ).toMatchObject({ nome: 'PRODUTO DE NOME MUITO LONGO QUE CONTINUA EMBAIXO', quantidade: 2.5, unidade: 'kg' })
+  })
+
+  it('recusa o que não está escrito na linha', () => {
+    const [a] = linhasParaIa(parcialCom([semHifen, 'TOTAL DE PRODUTOS: 1']))
+    const certo = { codigo: '1000011', ean: '0000001000011', nome: 'PRODUTO SEM HIFEN', teor: 98.5, quantidade: 250, unidade: 'g', observacao: null }
+    expect(conferirLeituraIa(a, certo)).not.toBeNull()
+    expect(conferirLeituraIa(a, { ...certo, codigo: '1000099' })).toBeNull()
+    expect(conferirLeituraIa(a, { ...certo, quantidade: 2500 })).toBeNull()
+    expect(conferirLeituraIa(a, { ...certo, unidade: 'kg' })).toBeNull()
+    // O teor não é a quantidade
+    expect(conferirLeituraIa(a, { ...certo, quantidade: 98.5 })).toBeNull()
+    expect(conferirLeituraIa(a, { ...certo, nome: 'OUTRO PRODUTO' })).toBeNull()
+    // EAN e teor inventados ficam de fora, o resto vale
+    expect(conferirLeituraIa(a, { ...certo, ean: '7890000000000', teor: 50 })?.item).toMatchObject({ ean: null, teor: null })
+  })
+
+  it('junta o que a IA leu na posição da linha e confere com o rodapé', () => {
+    const p = parcialCom([itens[0], semHifen, itens[1], 'TOTAL DE PRODUTOS: 3'])
+    const [a] = linhasParaIa(p)
+    const ia = conferirLeituraIa(a, { codigo: '1000011', ean: null, nome: 'PRODUTO SEM HIFEN', teor: 98.5, quantidade: 250, unidade: 'g', observacao: null })!
+    const r = concluirCotacaoPropria(p, [ia])
+    expect(r.ok).toBe(true)
+    if (!r.ok) return
+    expect(r.cotacao.itens.map((i) => i.codigo)).toEqual(['1004426', '1000011', '1006716'])
+    expect(r.cotacao.lidosPelaIa).toEqual([{ item: ia.item, linha: semHifen }])
+  })
+
+  it('aponta as linhas que nem a IA leu, com o motivo', () => {
+    const p = parcialCom([itens[0], semHifen, 'TOTAL DE PRODUTOS: 2'])
+    expect(concluirCotacaoPropria(p, [], 'A IA está com alta demanda agora.')).toEqual({
+      ok: false,
+      erro: `Li 1 produto(s), mas o relatório diz 2. Linha(s) que não consegui ler: "${semHifen}". A leitura dessas linhas pela IA também falhou: A IA está com alta demanda agora.`,
+    })
+  })
+
+  it('sem rodapé, importa o que leu e avisa das linhas que sobraram', () => {
+    const r = concluirCotacaoPropria(parcialCom([itens[0], semHifen]))
+    expect(r.ok).toBe(true)
+    if (!r.ok) return
+    expect(r.cotacao.avisos).toEqual([`1 linha(s) parecem produto e não foram lidas: "${semHifen}".`])
   })
 })
 
