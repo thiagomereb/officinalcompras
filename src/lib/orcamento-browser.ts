@@ -90,8 +90,9 @@ async function paginasDaPlanilha(dados: ArrayBuffer): Promise<Pagina[]> {
 }
 
 class ErroLeitura extends Error {
-  // reserva: a função pediu que a próxima tentativa vá direto para a IA reserva
-  constructor(message: string, readonly esperarS: number | null = null, readonly reserva = false) {
+  // reserva: para onde a próxima tentativa deve ir (true: direto para a IA
+  // reserva; false: de volta à principal; null: a resposta não disse)
+  constructor(message: string, readonly esperarS: number | null = null, readonly reserva: boolean | null = null) {
     super(message)
   }
 }
@@ -101,7 +102,7 @@ async function chamarLeitura(body: Record<string, unknown>): Promise<Record<stri
   if (error) {
     const resp = (error as { context?: Response }).context
     const corpo = (await resp?.json?.().catch(() => null)) as { error?: string; retry_after?: number; reserva?: boolean } | null
-    const reserva = corpo?.reserva === true
+    const reserva = typeof corpo?.reserva === 'boolean' ? corpo.reserva : null
     const status = resp?.status ?? 0
     if (STATUS_TROCA.has(status)) throw new ErroLeitura('A leitura desta página foi interrompida.', ESPERA_TROCA_S)
     if (status === 429 || status === 503) {
@@ -150,8 +151,8 @@ async function lerPagina(
       try {
         return await chamarLeitura(corpo)
       } catch (e) {
-        // Uma vez na reserva, as próximas tentativas desta página continuam nela
-        if (e instanceof ErroLeitura && e.reserva) corpo.reserva = true
+        // A função diz se a próxima tentativa vai para a reserva ou volta à principal
+        if (e instanceof ErroLeitura && e.reserva != null) corpo.reserva = e.reserva
         const pedida = e instanceof ErroLeitura ? e.esperarS : null
         if (pedida == null || pedida > MAX_ESPERA_S || tentativa >= MAX_TENTATIVAS) throw e
         // Com a IA sobrecarregada, cada nova tentativa espera um pouco mais

@@ -123,7 +123,8 @@ function jsonResponse(body: unknown, status = 200, extra: Record<string, string>
 // Peça para o navegador tentar de novo daqui a tantos segundos. reserva: a
 // próxima tentativa desta página deve ir direto para a IA reserva.
 function tenteDepois(error: string, status: number, segundos: number, reserva = false) {
-  return jsonResponse({ error, retry_after: segundos, ...(reserva ? { reserva: true } : {}) }, status, {
+  // reserva vai sempre (true ou false): false faz o navegador voltar ao Gemini
+  return jsonResponse({ error, retry_after: segundos, reserva }, status, {
     'Retry-After': String(segundos),
   })
 }
@@ -256,6 +257,8 @@ async function lerComGemini(apiKey: string, pagina: PaginaParaLer, timeoutMs: nu
   if (!resp.ok) {
     const corpo = await resp.json().catch(() => ({ error: { message: '' } }))
     const msg = corpo?.error?.message ?? ''
+    // A mensagem do Google como veio, para o diagnóstico
+    console.warn(`[ler-orcamento] gemini ${resp.status}: ${String(msg).slice(0, 200)}`)
     if (resp.status === 429) return { ok: false, motivo: 'cota', mensagem: classify429(msg) }
     if (resp.status === 503 || resp.status === 529) return { ok: false, motivo: 'sobrecarga', mensagem: 'A IA está com alta demanda agora.' }
     throw new Error(msg || `Gemini retornou status ${resp.status}`)
@@ -328,10 +331,16 @@ async function lerComOpenAI(apiKey: string, pagina: PaginaParaLer): Promise<Leit
   if (!resp.ok) {
     const corpo = await resp.json().catch(() => null)
     const erro = corpo?.error ?? {}
+    // O erro da OpenAI como veio (código e mensagem), para o diagnóstico
+    console.warn(`[ler-orcamento] openai ${resp.status}: ${erro.code ?? erro.type ?? '-'}: ${String(erro.message ?? '').slice(0, 200)}`)
     if (resp.status === 401) throw new Error('Chave da OpenAI inválida (secret OPENAI_API_KEY).')
     if (resp.status === 429) {
       const semCredito = erro.code === 'credit_balance_exhausted' || erro.type === 'insufficient_quota'
-      return { ok: false, motivo: 'cota', mensagem: semCredito ? 'Créditos da OpenAI esgotados.' : 'Limite da IA reserva atingido. Aguarde 1 minuto.' }
+      return {
+        ok: false,
+        motivo: 'cota',
+        mensagem: semCredito ? 'A IA reserva (OpenAI) está sem créditos.' : 'Limite da IA reserva atingido.',
+      }
     }
     if (resp.status >= 500) return { ok: false, motivo: 'sobrecarga', mensagem: 'A IA reserva também está com alta demanda.' }
     throw new Error(erro.message || `OpenAI retornou status ${resp.status}`)
@@ -466,8 +475,11 @@ Deno.serve(async (req) => {
       if (leitura.motivo === 'grande') {
         return jsonResponse({ error: 'Página com itens demais para uma leitura. Divida o arquivo.' }, 422)
       }
-      if (leitura.motivo === 'cota') return tenteDepois(leitura.mensagem, 429, 60, usandoReserva)
-      return tenteDepois(leitura.mensagem, 503, leitura.motivo === 'demora' ? 15 : 20, usandoReserva)
+      // Se foi a reserva que falhou (sem crédito, sobrecarga, demora), a próxima
+      // tentativa volta para o Gemini, que pode já ter se recuperado
+      const mensagem = usandoReserva ? `${leitura.mensagem} Tentando de novo pela IA principal.` : leitura.mensagem
+      if (leitura.motivo === 'cota') return tenteDepois(mensagem, 429, usandoReserva ? 20 : 60)
+      return tenteDepois(mensagem, 503, leitura.motivo === 'demora' ? 15 : 20)
     }
     console.log(`[ler-orcamento] ${cabecalhoPagina} | ${temTexto ? 'texto' : 'imagem'} | ${segundos}s | worker ${Math.round((Date.now() - INICIO_WORKER) / 1000)}s | ${leitura.uso}`)
 
