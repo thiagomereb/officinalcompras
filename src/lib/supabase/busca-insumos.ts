@@ -4,11 +4,15 @@ export type InsumoOpcao = {
   id: string
   nome_padrao: string
   unidade_padrao: string | null
+  // Código do produto no sistema da farmácia; null quando o cadastro não tem
+  // ou quando o insumo veio só pela busca por semelhança (que não traz o código)
+  codigo: string | null
   // Preenchido quando o insumo foi achado por um sinônimo, para mostrar o porquê
   via_sinonimo: string | null
 }
 
 const LIMITE = 12
+const CAMPOS = 'id, nome_padrao, unidade_padrao, codigo'
 
 // Roda no navegador, direto no Supabase (o RLS libera para usuário logado). A
 // alternativa — mandar a tabela inteira de insumos junto com a página — pesava
@@ -19,16 +23,20 @@ export async function buscarInsumos(termo: string): Promise<InsumoOpcao[]> {
   if (!t) return []
 
   const supabase = createClient()
-  const [porNome, porSinonimo, parecidos] = await Promise.all([
+  const [porCodigo, porNome, porSinonimo, parecidos] = await Promise.all([
+    // Só números: pode ser o código do sistema da farmácia
+    /^\d+$/.test(t)
+      ? supabase.from('insumos').select(CAMPOS).like('codigo', `${t}%`).order('codigo').limit(LIMITE)
+      : Promise.resolve({ data: null, error: null }),
     supabase
       .from('insumos')
-      .select('id, nome_padrao, unidade_padrao')
+      .select(CAMPOS)
       .ilike('nome_padrao', `%${t}%`)
       .order('nome_padrao')
       .limit(LIMITE),
     supabase
       .from('insumo_sinonimos')
-      .select('sinonimo, insumos(id, nome_padrao, unidade_padrao)')
+      .select(`sinonimo, insumos(${CAMPOS})`)
       .ilike('sinonimo', `%${t}%`)
       .limit(LIMITE),
     // Similaridade (pg_trgm) cobre acento e grafia: "acido ascorbico" acha
@@ -41,7 +49,9 @@ export async function buscarInsumos(termo: string): Promise<InsumoOpcao[]> {
   if (porNome.error) throw new Error(porNome.error.message)
 
   const encontrados = new Map<string, InsumoOpcao>()
-  for (const i of porNome.data ?? []) encontrados.set(i.id, { ...i, via_sinonimo: null })
+  for (const i of [...(porCodigo.data ?? []), ...(porNome.data ?? [])]) {
+    if (!encontrados.has(i.id)) encontrados.set(i.id, { ...i, via_sinonimo: null })
+  }
   for (const s of porSinonimo.data ?? []) {
     const i = s.insumos
     if (i && !encontrados.has(i.id)) encontrados.set(i.id, { ...i, via_sinonimo: s.sinonimo })
@@ -52,6 +62,7 @@ export async function buscarInsumos(termo: string): Promise<InsumoOpcao[]> {
         id: p.insumo_id,
         nome_padrao: p.nome_padrao,
         unidade_padrao: null,
+        codigo: null,
         via_sinonimo: null,
       })
     }

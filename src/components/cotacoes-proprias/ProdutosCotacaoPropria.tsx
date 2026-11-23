@@ -1,10 +1,11 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useTransition } from 'react'
 import Link from 'next/link'
-import { Check, Search } from 'lucide-react'
+import { Check, Search, Trash2 } from 'lucide-react'
 import { LeituraPreco } from '@/components/ui/LeituraPreco'
 import { melhorDoFornecedor, resumirProduto, type OfertaProduto, type ResumoProduto } from '@/lib/ofertas-cotacao'
+import type { Falha } from '@/lib/acoes'
 
 export type ProdutoPedido = {
   id: string
@@ -17,15 +18,23 @@ export type ProdutoPedido = {
   insumo_id: string
   // O insumo entrou no cadastro com esta importação
   novo_no_cadastro: boolean
+  // Não veio no PDF: o comprador incluiu depois
+  incluido_a_mao: boolean
 }
 
 export type FornecedorDaCotacao = { id: string; nome: string }
+
+type Remover = (itemId: string, cotacaoPropriaId: string) => Promise<Falha | void>
 
 interface Props {
   cotacaoPropriaId: string
   produtos: ProdutoPedido[]
   ofertas: OfertaProduto[]
   fornecedores: FornecedorDaCotacao[]
+  // Botão de incluir produto, no topo do painel
+  incluir?: React.ReactNode
+  // Tira da cotação um produto incluído à mão; ausente quando ela não muda mais
+  remover?: Remover
 }
 
 type Situacao = 'todos' | 'com' | 'sem'
@@ -35,7 +44,29 @@ const quantidadeBR = (q: number) => q.toLocaleString('pt-BR', { maximumFractionD
 const moeda = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 const data = (d: string) => new Date(d + 'T12:00:00').toLocaleDateString('pt-BR')
 
-function NomeProduto({ p }: { p: ProdutoPedido }) {
+function RemoverIncluido({ p, cotacaoPropriaId, remover }: { p: ProdutoPedido; cotacaoPropriaId: string; remover: Remover }) {
+  const [pending, startTransition] = useTransition()
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        if (!confirm(`Tirar ${p.codigo} - ${p.nome} da cotação?`)) return
+        startTransition(async () => {
+          const r = await remover(p.id, cotacaoPropriaId)
+          if (r?.erro) alert(r.erro)
+        })
+      }}
+      disabled={pending}
+      className="btn btn-fantasma btn-icone btn-sm ml-1 h-6 w-6 align-middle"
+      title="Tirar da cotação"
+      aria-label={`Tirar ${p.nome} da cotação`}
+    >
+      {pending ? <span className="girador" aria-hidden="true" /> : <Trash2 size={13} />}
+    </button>
+  )
+}
+
+function NomeProduto({ p, remocao }: { p: ProdutoPedido; remocao?: React.ReactNode }) {
   return (
     <>
       <Link href={`/insumos/${p.insumo_id}`} className="hover:underline">
@@ -46,11 +77,17 @@ function NomeProduto({ p }: { p: ProdutoPedido }) {
           novo no cadastro
         </span>
       )}
+      {p.incluido_a_mao && (
+        <span className="selo ml-2 h-5 px-1.5 text-[11px]" title="Não veio no PDF da cotação: foi incluído depois">
+          incluído à mão
+        </span>
+      )}
+      {remocao}
     </>
   )
 }
 
-export function ProdutosCotacaoPropria({ cotacaoPropriaId, produtos, ofertas, fornecedores }: Props) {
+export function ProdutosCotacaoPropria({ cotacaoPropriaId, produtos, ofertas, fornecedores, incluir, remover }: Props) {
   const [fornecedor, setFornecedor] = useState<string>(TODOS)
   const [situacao, setSituacao] = useState<Situacao>('todos')
   const [busca, setBusca] = useState('')
@@ -143,15 +180,18 @@ export function ProdutosCotacaoPropria({ cotacaoPropriaId, produtos, ofertas, fo
             </div>
           )}
         </div>
-        <div className="relative w-full sm:w-64">
-          <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ardosia-2" />
-          <input
-            value={busca}
-            onChange={(e) => setBusca(e.target.value)}
-            placeholder="Filtrar por nome, código ou EAN"
-            aria-label="Filtrar produtos"
-            className="campo campo-sm pl-8"
-          />
+        <div className="flex w-full items-center gap-2 sm:w-auto">
+          <div className="relative min-w-0 flex-1 sm:w-64 sm:flex-none">
+            <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ardosia-2" />
+            <input
+              value={busca}
+              onChange={(e) => setBusca(e.target.value)}
+              placeholder="Filtrar por nome, código ou EAN"
+              aria-label="Filtrar produtos"
+              className="campo campo-sm pl-8"
+            />
+          </div>
+          {incluir}
         </div>
       </div>
 
@@ -190,7 +230,14 @@ export function ProdutosCotacaoPropria({ cotacaoPropriaId, produtos, ofertas, fo
                       <td className={`num leitura ${r.qf === 0 ? 'text-ardosia-2' : 'font-medium'}`}>{r.qf}</td>
                       <td className="leitura text-ardosia">{p.codigo}</td>
                       <td>
-                        <NomeProduto p={p} />
+                        <NomeProduto
+                          p={p}
+                          remocao={
+                            p.incluido_a_mao && remover && r.qf === 0 ? (
+                              <RemoverIncluido p={p} cotacaoPropriaId={cotacaoPropriaId} remover={remover} />
+                            ) : undefined
+                          }
+                        />
                       </td>
                       <td className="num leitura text-ardosia">{p.teor != null ? `${quantidadeBR(p.teor)}%` : '—'}</td>
                       <td className="num leitura">

@@ -2,7 +2,13 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database } from '@/types/database'
 import { buscarTodos, emLotes } from './supabase/consultas'
 
-export type PedidoComSinonimos = { id: string; codigo: string; nome: string; insumo_id: string; sinonimos: string[] }
+// A importação grava a cotação e os produtos do PDF na mesma transação, com o
+// mesmo created_at; produto com outro horário foi incluído à mão depois
+export function incluidoAMao(itemCriadoEm: string, cotacaoCriadaEm: string): boolean {
+  return new Date(itemCriadoEm).getTime() !== new Date(cotacaoCriadaEm).getTime()
+}
+
+export type PedidoComSinonimos ={ id: string; codigo: string; nome: string; insumo_id: string; sinonimos: string[] }
 
 // Os produtos pedidos de uma cotação própria, cada um com os sinônimos do
 // insumo dele (para achar "ACIDO ASCORBICO" buscando "vitamina c")

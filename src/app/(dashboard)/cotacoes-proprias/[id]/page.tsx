@@ -13,8 +13,10 @@ import {
 } from '@/components/cotacoes-proprias/ProdutosCotacaoPropria'
 import type { OfertaProduto } from '@/lib/ofertas-cotacao'
 import { AdicionarOrcamento } from '@/components/cotacoes-proprias/AdicionarOrcamento'
+import { IncluirProduto } from '@/components/cotacoes-proprias/IncluirProduto'
+import { incluidoAMao } from '@/lib/pedidos'
 import { ExcluirCotacaoPropriaButton } from './ExcluirCotacaoPropriaButton'
-import { excluirCotacaoPropria } from '../actions'
+import { excluirCotacaoPropria, incluirProdutoNaCotacao, removerProdutoIncluido } from '../actions'
 import { dadosParaNovoOrcamento, salvarOrcamento } from '../orcamentos-actions'
 
 const moeda = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
@@ -40,7 +42,7 @@ export default async function CotacaoPropriaPage({
     buscarTodos((de, ate) =>
       supabase
         .from('cotacao_propria_itens')
-        .select('id, codigo, ean, nome, teor, quantidade, unidade, insumo_id, insumos(created_at)')
+        .select('id, codigo, ean, nome, teor, quantidade, unidade, insumo_id, created_at, insumos(created_at)')
         .eq('cotacao_propria_id', id)
         .order('ordem')
         .range(de, ate),
@@ -114,14 +116,18 @@ export default async function CotacaoPropriaPage({
   // A importação grava cotação e insumos novos na mesma transação, então o
   // insumo criado por ela tem exatamente o mesmo created_at
   const criadoEm = new Date(cotacao.created_at).getTime()
-  const produtos: ProdutoPedido[] = itens.map(({ insumos, ...p }) => ({
+  const produtos: ProdutoPedido[] = itens.map(({ insumos, created_at, ...p }) => ({
     ...p,
     novo_no_cadastro: !!insumos?.created_at && new Date(insumos.created_at).getTime() === criadoEm,
+    incluido_a_mao: incluidoAMao(created_at, cotacao.created_at),
   }))
   // O mapa mais recente que não foi cancelado
   const mapa = mapas?.[0]
+  // Mapa aprovado é o registro da compra: a lista de produtos não muda mais
+  const fechada = !!mapas?.some((m) => m.status === 'aprovado' || m.status === 'exportado')
   const comOferta = new Set(ofertas.map((o) => o.pedidoId)).size
   const novos = produtos.filter((p) => p.novo_no_cadastro).length
+  const incluidos = produtos.filter((p) => p.incluido_a_mao).length
 
   return (
     <div className="pagina">
@@ -180,6 +186,12 @@ export default async function CotacaoPropriaPage({
           <>
             {' · '}
             <span className="text-grafite">{novos}</span> produto(s) entraram no cadastro de insumos com ela
+          </>
+        )}
+        {incluidos > 0 && (
+          <>
+            {' · '}
+            <span className="text-grafite">{incluidos}</span> produto(s) incluído(s) à mão depois
           </>
         )}
       </p>
@@ -243,6 +255,14 @@ export default async function CotacaoPropriaPage({
         produtos={produtos}
         ofertas={ofertas}
         fornecedores={fornecedoresDaCotacao}
+        incluir={
+          <IncluirProduto
+            cotacaoPropriaId={id}
+            incluir={incluirProdutoNaCotacao}
+            bloqueio={fechada ? 'A cotação tem mapa aprovado: a lista de produtos não muda mais.' : null}
+          />
+        }
+        remover={fechada ? undefined : removerProdutoIncluido}
       />
     </div>
   )
