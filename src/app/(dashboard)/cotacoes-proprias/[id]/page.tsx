@@ -99,19 +99,22 @@ export default async function CotacaoPropriaPage({
     ...new Map((orcamentos ?? []).map((o) => [o.fornecedor_id, { id: o.fornecedor_id, nome: nomeFornecedor(o.fornecedores) }])).values(),
   ].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
 
-  const linhasOrcamento = (orcamentos ?? []).map((o) => {
-    const itensOrc = (o.cotacao_itens ?? []) as { cotacao_propria_item_id: string | null; vinculo_origem: string | null }[]
-    return {
-      id: o.id,
-      fornecedor: nomeFornecedor(o.fornecedores),
-      numero: o.numero_orcamento,
-      data: o.data_cotacao,
-      total: o.total_documento,
-      itens: itensOrc.length,
-      produtos: new Set(itensOrc.flatMap((i) => (i.cotacao_propria_item_id ? [i.cotacao_propria_item_id] : []))).size,
-      conferir: itensOrc.filter((i) => i.vinculo_origem === 'ia').length,
-    }
-  })
+  // Em ordem alfabética do fornecedor; do mesmo fornecedor, na ordem em que entraram
+  const linhasOrcamento = (orcamentos ?? [])
+    .map((o) => {
+      const itensOrc = (o.cotacao_itens ?? []) as { cotacao_propria_item_id: string | null; vinculo_origem: string | null }[]
+      return {
+        id: o.id,
+        fornecedor: nomeFornecedor(o.fornecedores),
+        numero: o.numero_orcamento,
+        data: o.data_cotacao,
+        total: o.total_documento,
+        itens: itensOrc.length,
+        produtos: new Set(itensOrc.flatMap((i) => (i.cotacao_propria_item_id ? [i.cotacao_propria_item_id] : []))).size,
+        conferir: itensOrc.filter((i) => i.vinculo_origem === 'ia').length,
+      }
+    })
+    .sort((a, b) => a.fornecedor.localeCompare(b.fornecedor, 'pt-BR', { sensitivity: 'base' }))
 
   // A importação grava cotação e insumos novos na mesma transação, então o
   // insumo criado por ela tem exatamente o mesmo created_at
