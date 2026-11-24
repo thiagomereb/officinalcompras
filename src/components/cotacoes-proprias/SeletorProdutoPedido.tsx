@@ -6,6 +6,24 @@ import { buscarProdutosPedidos, type ProdutoPedidoOpcao } from '@/lib/busca-pedi
 
 export type { ProdutoPedidoOpcao }
 
+const quantidadeBR = (q: number) => q.toLocaleString('pt-BR', { maximumFractionDigits: 4 })
+
+// Quanto a cotação pediu do produto, ao lado do vínculo, para comparar com a
+// embalagem que o fornecedor cotou
+export function QuantidadePedida({ produto }: { produto: ProdutoPedidoOpcao }) {
+  return (
+    <span
+      className="shrink-0 rounded-md bg-nevoa px-1.5 py-px text-[11.5px] text-ardosia"
+      title={`Pedido na cotação: ${quantidadeBR(produto.quantidade)} ${produto.unidade}`}
+    >
+      pedido{' '}
+      <span className="leitura font-medium text-grafite">
+        {quantidadeBR(produto.quantidade)} {produto.unidade}
+      </span>
+    </span>
+  )
+}
+
 interface Props {
   pedidos: ProdutoPedidoOpcao[]
   pendente?: boolean
@@ -48,7 +66,10 @@ export function SeletorProdutoPedido({ pedidos, pendente = false, sugestao = '',
             >
               <span className="flex items-baseline gap-3">
                 <span className="leitura text-[12px] text-ardosia">{produto.codigo}</span>
-                {produto.nome}
+                <span className="min-w-0 flex-1">{produto.nome}</span>
+                <span className="leitura shrink-0 text-[12px] text-ardosia" title="Quantidade pedida na cotação">
+                  {quantidadeBR(produto.quantidade)} {produto.unidade}
+                </span>
               </span>
               {viaSinonimo && <span className="text-[11.5px] text-ardosia">sinônimo: {viaSinonimo}</span>}
             </button>

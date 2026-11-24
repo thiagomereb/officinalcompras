@@ -1,5 +1,13 @@
-// Produto pedido na cotação própria, com os sinônimos do insumo dele para a busca
-export type ProdutoPedidoOpcao = { id: string; codigo: string; nome: string; sinonimos: string[] }
+// Produto pedido na cotação própria, com os sinônimos do insumo dele para a
+// busca e a quantidade pedida (mostrada ao lado de cada vínculo)
+export type ProdutoPedidoOpcao = {
+  id: string
+  codigo: string
+  nome: string
+  sinonimos: string[]
+  quantidade: number
+  unidade: string
+}
 
 export type ResultadoBusca = { produto: ProdutoPedidoOpcao; viaSinonimo: string | null }
 

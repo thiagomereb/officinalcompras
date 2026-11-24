@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest'
 import { buscarProdutosPedidos, type ProdutoPedidoOpcao } from './busca-pedidos'
 
 const pedidos: ProdutoPedidoOpcao[] = [
-  { id: '1', codigo: '1001029', nome: 'VITAMINA C (REVESTIDA)', sinonimos: ['ACIDO ASCORBICO (REVESTIDO - USO INTERNO)'] },
-  { id: '2', codigo: '1000187', nome: 'CITRATO DE CALCIO', sinonimos: ['CALCIO CITRATO'] },
-  { id: '3', codigo: '1004689', nome: 'ACIDO TRANEXAMICO', sinonimos: [] },
+  { id: '1', codigo: '1001029', nome: 'VITAMINA C (REVESTIDA)', sinonimos: ['ACIDO ASCORBICO (REVESTIDO - USO INTERNO)'], quantidade: 1000, unidade: 'g' },
+  { id: '2', codigo: '1000187', nome: 'CITRATO DE CALCIO', sinonimos: ['CALCIO CITRATO'], quantidade: 500, unidade: 'g' },
+  { id: '3', codigo: '1004689', nome: 'ACIDO TRANEXAMICO', sinonimos: [], quantidade: 50, unidade: 'g' },
 ]
 
 describe('buscarProdutosPedidos', () => {

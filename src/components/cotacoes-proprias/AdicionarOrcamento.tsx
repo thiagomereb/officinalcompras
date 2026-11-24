@@ -12,7 +12,7 @@ import { precoPorUnidadeBase } from '@/lib/unidades'
 import { LeituraPreco } from '@/components/ui/LeituraPreco'
 import { Modal } from '@/components/ui/Modal'
 import type { dadosParaNovoOrcamento, salvarOrcamento } from '@/app/(dashboard)/cotacoes-proprias/orcamentos-actions'
-import { SeletorProdutoPedido, type ProdutoPedidoOpcao } from './SeletorProdutoPedido'
+import { QuantidadePedida, SeletorProdutoPedido, type ProdutoPedidoOpcao } from './SeletorProdutoPedido'
 
 type Fornecedor = FornecedorCadastro
 type Dados = { fornecedores: Fornecedor[]; pedidos: ProdutoPedidoOpcao[] }
@@ -479,9 +479,12 @@ export function AdicionarOrcamento({ cotacaoPropriaId, carregarDados, salvar, ab
                           ) : (
                             <div className="flex items-center gap-1">
                               {pedido ? (
-                                <span className="truncate" title={`${pedido.codigo} · ${pedido.nome}`}>
-                                  {pedido.nome}
-                                </span>
+                                <>
+                                  <span className="truncate" title={`${pedido.codigo} · ${pedido.nome}`}>
+                                    {pedido.nome}
+                                  </span>
+                                  <QuantidadePedida produto={pedido} />
+                                </>
                               ) : vinculo?.codigo ? (
                                 <span className="text-ardosia">{vinculo.codigo}</span>
                               ) : (

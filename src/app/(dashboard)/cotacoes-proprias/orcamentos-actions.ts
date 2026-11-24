@@ -76,7 +76,7 @@ export async function dadosParaNovoOrcamento(
           codigo: f.codigo,
           credenciado: f.credenciado,
         })),
-      pedidos: pedidos.map(({ id, codigo, nome, sinonimos }) => ({ id, codigo, nome, sinonimos })),
+      pedidos: pedidos.map(({ id, codigo, nome, sinonimos, quantidade, unidade }) => ({ id, codigo, nome, sinonimos, quantidade, unidade })),
     }
   } catch (e) {
     return { erro: (e as Error).message }

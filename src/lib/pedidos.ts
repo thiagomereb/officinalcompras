@@ -8,7 +8,15 @@ export function incluidoAMao(itemCriadoEm: string, cotacaoCriadaEm: string): boo
   return new Date(itemCriadoEm).getTime() !== new Date(cotacaoCriadaEm).getTime()
 }
 
-export type PedidoComSinonimos ={ id: string; codigo: string; nome: string; insumo_id: string; sinonimos: string[] }
+export type PedidoComSinonimos = {
+  id: string
+  codigo: string
+  nome: string
+  insumo_id: string
+  quantidade: number
+  unidade: string
+  sinonimos: string[]
+}
 
 // Os produtos pedidos de uma cotação própria, cada um com os sinônimos do
 // insumo dele (para achar "ACIDO ASCORBICO" buscando "vitamina c")
@@ -19,7 +27,7 @@ export async function carregarPedidosComSinonimos(
   const pedidos = await buscarTodos((de, ate) =>
     supabase
       .from('cotacao_propria_itens')
-      .select('id, codigo, nome, insumo_id')
+      .select('id, codigo, nome, insumo_id, quantidade, unidade')
       .eq('cotacao_propria_id', cotacaoPropriaId)
       .order('ordem')
       .range(de, ate),

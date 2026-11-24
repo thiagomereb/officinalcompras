@@ -5,7 +5,7 @@ import { Check, Pencil, Search } from 'lucide-react'
 import { precoPorUnidadeBase } from '@/lib/unidades'
 import { LeituraPreco } from '@/components/ui/LeituraPreco'
 import type { alterarVinculoOrcamento, confirmarSugestoes } from '@/app/(dashboard)/cotacoes-proprias/orcamentos-actions'
-import { SeletorProdutoPedido, type ProdutoPedidoOpcao } from './SeletorProdutoPedido'
+import { QuantidadePedida, SeletorProdutoPedido, type ProdutoPedidoOpcao } from './SeletorProdutoPedido'
 
 export type ItemOrcamento = {
   id: string
@@ -165,9 +165,12 @@ export function ItensOrcamento({ itens, pedidos, orcamentoId, cotacaoPropriaId, 
                       ) : (
                         <div className="flex items-center gap-1">
                           {i.pedido ? (
-                            <span className="truncate" title={`${i.pedido.codigo} · ${i.pedido.nome}`}>
-                              {i.pedido.nome}
-                            </span>
+                            <>
+                              <span className="truncate" title={`${i.pedido.codigo} · ${i.pedido.nome}`}>
+                                {i.pedido.nome}
+                              </span>
+                              <QuantidadePedida produto={i.pedido} />
+                            </>
                           ) : (
                             <span className="text-ardosia-2">fora da cotação</span>
                           )}
