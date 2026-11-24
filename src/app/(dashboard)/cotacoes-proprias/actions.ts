@@ -29,7 +29,7 @@ function itensValidos(itens: unknown): ItemCotacaoPropria[] | Falha {
   if (!Array.isArray(itens) || itens.length === 0) return { erro: 'Nenhum produto na cotação.' }
   if (itens.length > LIMITE_ITENS) return { erro: `A cotação passa de ${LIMITE_ITENS} produtos.` }
 
-  const codigos = new Set<string>()
+  // O mesmo código pode vir em mais de uma linha: cada linha é um item, como no relatório
   const validos: ItemCotacaoPropria[] = []
   for (const raw of itens) {
     const i = (raw ?? {}) as Record<string, unknown>
@@ -45,8 +45,6 @@ function itensValidos(itens: unknown): ItemCotacaoPropria[] | Falha {
     if (i.ean != null && (!ean || !/^[0-9A-Z]+$/i.test(ean))) return { erro: `EAN inválido no produto ${codigo}.` }
     if (teor != null && !(teor >= 0 && teor <= 100)) return { erro: `Teor inválido no produto ${codigo}.` }
     if (!Number.isFinite(quantidade) || quantidade < 0) return { erro: `Quantidade inválida no produto ${codigo}.` }
-    if (codigos.has(codigo)) return { erro: `O produto ${codigo} aparece duas vezes.` }
-    codigos.add(codigo)
 
     validos.push({ codigo, ean, nome, teor, quantidade, unidade })
   }
@@ -192,7 +190,13 @@ export async function incluirProdutoNaCotacao(payload: unknown): Promise<Falha |
   const [{ data: cotacao }, fechado, { data: mesmoCodigo }] = await Promise.all([
     supabase.from('cotacoes_proprias').select('id').eq('id', cotacaoPropriaId).maybeSingle(),
     temMapaFechado(supabase, cotacaoPropriaId),
-    supabase.from('cotacao_propria_itens').select('nome').eq('cotacao_propria_id', cotacaoPropriaId).eq('codigo', codigo).maybeSingle(),
+    supabase
+      .from('cotacao_propria_itens')
+      .select('nome')
+      .eq('cotacao_propria_id', cotacaoPropriaId)
+      .eq('codigo', codigo)
+      .limit(1)
+      .maybeSingle(),
   ])
   if (!cotacao) return { erro: 'Cotação não encontrada.' }
   if (fechado) return { erro: MAPA_FECHADO }

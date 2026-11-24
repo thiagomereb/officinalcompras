@@ -28,8 +28,10 @@ interface Props {
   rotulo?: string
 }
 
-// O vínculo de cada item na conferência: o que a leitura sugeriu ou o que o comprador escolheu
-type Vinculo = { codigo: string | null; conferido: boolean }
+// O vínculo de cada item na conferência: o que a leitura sugeriu (pelo código)
+// ou o que o comprador escolheu (a linha exata, pedidoId: o mesmo código pode
+// estar em mais de uma linha da cotação)
+type Vinculo = { codigo: string | null; pedidoId: string | null; conferido: boolean }
 type Filtro = 'ligados' | 'fora' | 'todos'
 type Lido = OrcamentoLido & { paginas: number; textoCabecalho: string }
 
@@ -144,7 +146,7 @@ export function AdicionarOrcamento({ cotacaoPropriaId, carregarDados, salvar, ab
       const reconhecido = reconhecerFornecedor(d?.fornecedores ?? [], r.cabecalho.cnpj, r.textoCabecalho)
       setFornecedorId(reconhecido.id)
       setReconhecimento(reconhecido)
-      setVinculos(r.itens.map((i) => ({ codigo: i.codigo_pedido, conferido: false })))
+      setVinculos(r.itens.map((i) => ({ codigo: i.codigo_pedido, pedidoId: null, conferido: false })))
       setFiltro('todos')
       setLido(r)
     } catch (e) {
@@ -159,10 +161,20 @@ export function AdicionarOrcamento({ cotacaoPropriaId, carregarDados, salvar, ab
 
   const pedidos = useMemo(() => dados?.pedidos ?? [], [dados])
   const fornecedores = useMemo(() => dados?.fornecedores ?? [], [dados])
-  const pedidoPorCodigo = useMemo(() => new Map(pedidos.map((p) => [p.codigo, p])), [pedidos])
+  // Código repetido na cotação: a sugestão da leitura fica com a primeira linha dele
+  const pedidoPorCodigo = useMemo(() => {
+    const m = new Map<string, ProdutoPedidoOpcao>()
+    for (const p of pedidos) if (!m.has(p.codigo)) m.set(p.codigo, p)
+    return m
+  }, [pedidos])
+  const pedidoPorId = useMemo(() => new Map(pedidos.map((p) => [p.id, p])), [pedidos])
+  const pedidoDo = (v: Vinculo | undefined) =>
+    v?.pedidoId ? pedidoPorId.get(v.pedidoId) : v?.codigo ? pedidoPorCodigo.get(v.codigo) : undefined
 
   function vincular(indice: number, produto: ProdutoPedidoOpcao | null) {
-    setVinculos((v) => v.map((x, k) => (k === indice ? { codigo: produto?.codigo ?? null, conferido: true } : x)))
+    setVinculos((v) =>
+      v.map((x, k) => (k === indice ? { codigo: produto?.codigo ?? null, pedidoId: produto?.id ?? null, conferido: true } : x)),
+    )
     setEditando(null)
   }
 
@@ -173,7 +185,7 @@ export function AdicionarOrcamento({ cotacaoPropriaId, carregarDados, salvar, ab
       ligados,
       fora: vinculos.length - ligados,
       conferidos: vinculos.filter((v) => v.conferido).length,
-      produtos: new Set(vinculos.flatMap((v) => (v.codigo ? [v.codigo] : []))).size,
+      produtos: new Set(vinculos.flatMap((v) => (v.codigo ? [v.pedidoId ?? v.codigo] : []))).size,
       total: conferirTotal(lido.itens, lido.cabecalho.total_documento),
     }
   }, [lido, vinculos])
@@ -195,7 +207,12 @@ export function AdicionarOrcamento({ cotacaoPropriaId, carregarDados, salvar, ab
           arquivoUrl: path,
           arquivoNome: arquivo.name,
           cabecalho: lido.cabecalho,
-          itens: lido.itens.map((i, k) => ({ ...i, codigo_pedido: vinculos[k].codigo, conferido: vinculos[k].conferido })),
+          itens: lido.itens.map((i, k) => ({
+            ...i,
+            codigo_pedido: vinculos[k].codigo,
+            pedido_id: vinculos[k].pedidoId,
+            conferido: vinculos[k].conferido,
+          })),
         })
         if ('erro' in r) {
           await removerArquivoCotacao(path)
@@ -456,7 +473,7 @@ export function AdicionarOrcamento({ cotacaoPropriaId, carregarDados, salvar, ab
                   {linhas.map(({ item: i, indice, vinculo }) => {
                     const g = itemParaGravar(i)
                     const base = precoPorUnidadeBase(g.preco_unitario, g.quantidade_minima, g.unidade)
-                    const pedido = vinculo?.codigo ? pedidoPorCodigo.get(vinculo.codigo) : undefined
+                    const pedido = pedidoDo(vinculo)
                     return (
                       <tr key={indice} className="group/linha align-top">
                         <td className="max-w-[300px]">

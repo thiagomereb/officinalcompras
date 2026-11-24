@@ -104,35 +104,40 @@ describe('lerCotacaoPropria', () => {
     })
   })
 
-  it('EAN curto, produto repetido somado e teor impossível', () => {
+  it('EAN curto, produto repetido em linhas separadas e teor impossível', () => {
     const linhas = [
       '0047 1000005 - PARACETAMOL EXEMPLO (DC 90) [100.0000 %] 1.000,0000 g',
       '0000004000035 4000035 - CAPSULA Nº 00 1G (AZUL / BRANCA) 10.000,0000 u',
       '0000001005932 1005932 - PRODUTO EXEMPLO (USO INTERNO) [50100.0000 %] 50,0000 g',
       '0000004000035 4000035 - CAPSULA Nº 00 1G (AZUL / BRANCA) 20.000,0000 u',
     ]
-    // O rodapé conta as 4 linhas, mesmo com o produto repetido
+    // O rodapé conta as 4 linhas; o produto repetido fica como veio, sem somar
     const r = lerCotacaoPropria([...cabecalho, ...linhas, 'TOTAL DE PRODUTOS:4'])
     expect(r.ok).toBe(true)
     if (!r.ok) return
     expect(r.cotacao.itens.map((i) => [i.codigo, i.ean, i.teor, i.quantidade, i.unidade])).toEqual([
       ['1000005', '0047', 100, 1000, 'g'],
-      ['4000035', '0000004000035', null, 30000, 'un'],
+      ['4000035', '0000004000035', null, 10000, 'un'],
       ['1005932', '0000001005932', null, 50, 'g'],
+      ['4000035', '0000004000035', null, 20000, 'un'],
     ])
     expect(r.cotacao.avisos).toEqual([
       '1005932 - PRODUTO EXEMPLO (USO INTERNO): teor "50100.0000 %" no sistema; entra sem teor.',
-      '4000035 - CAPSULA Nº 00 1G (AZUL / BRANCA) aparece 2 vezes: quantidades somadas (10.000 + 20.000 = 30.000 un).',
     ])
   })
 
-  it('recusa produto repetido em unidades diferentes', () => {
+  it('mantém o produto repetido mesmo em unidades diferentes', () => {
     const r = lerCotacaoPropria([
       ...cabecalho,
       '0000004000035 4000035 - CAPSULA EXEMPLO 10.000,0000 u',
       '0000004000035 4000035 - CAPSULA EXEMPLO 10,0000 g',
     ])
-    expect(r).toEqual({ ok: false, erro: expect.stringContaining('em unidades diferentes (un e g)') })
+    expect(r.ok).toBe(true)
+    if (!r.ok) return
+    expect(r.cotacao.itens.map((i) => [i.codigo, i.quantidade, i.unidade])).toEqual([
+      ['4000035', 10000, 'un'],
+      ['4000035', 10, 'g'],
+    ])
   })
 })
 

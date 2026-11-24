@@ -179,8 +179,8 @@ export function ImportarCotacaoPropria({ action }: Props) {
                   {lida.lidosPelaIa.length} linha(s) vieram num formato diferente e foram lidas pela IA. Confira com o PDF:
                 </span>
                 <ul className="mt-1.5 space-y-1.5">
-                  {lida.lidosPelaIa.map(({ item, linha }) => (
-                    <li key={`${item.codigo}-${linha}`}>
+                  {lida.lidosPelaIa.map(({ item, linha }, k) => (
+                    <li key={k}>
                       <span className="leitura">{item.codigo}</span> - {item.nome}
                       {item.teor != null && ` [${quantidadeBR(item.teor)}%]`} ·{' '}
                       <span className="leitura font-medium">
@@ -219,8 +219,8 @@ export function ImportarCotacaoPropria({ action }: Props) {
                 </tr>
               </thead>
               <tbody>
-                {lida.itens.slice(0, AMOSTRA).map((i) => (
-                  <tr key={i.codigo}>
+                {lida.itens.slice(0, AMOSTRA).map((i, k) => (
+                  <tr key={k}>
                     <td className="leitura text-ardosia">{i.codigo}</td>
                     <td>{i.nome}</td>
                     <td className="num leitura text-ardosia">{i.teor != null ? `${quantidadeBR(i.teor)}%` : '—'}</td>

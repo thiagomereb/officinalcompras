@@ -94,10 +94,13 @@ export async function salvarOrcamento(payload: unknown): Promise<{ id: string } 
 
   if (!Array.isArray(p.itens) || p.itens.length === 0) return { erro: 'Nenhum item lido no orçamento.' }
   if (p.itens.length > LIMITE_ITENS) return { erro: `O orçamento passa de ${LIMITE_ITENS} itens.` }
-  // conferido: o comprador escolheu o produto pedido na prévia
+  // conferido: o comprador escolheu o produto pedido na prévia; pedido_id: a
+  // linha exata que ele escolheu (o mesmo código pode estar em mais de uma)
   const itens = p.itens.flatMap((raw) => {
     const item = itemValido(raw)
-    return item ? [{ ...item, conferido: (raw as Record<string, unknown>)?.conferido === true }] : []
+    const r = (raw ?? {}) as Record<string, unknown>
+    const pedidoId = typeof r.pedido_id === 'string' && UUID.test(r.pedido_id) ? r.pedido_id : null
+    return item ? [{ ...item, conferido: r.conferido === true, pedidoId }] : []
   })
   if (itens.length === 0) return { erro: 'Nenhum item com preço válido no orçamento.' }
 
@@ -114,9 +117,14 @@ export async function salvarOrcamento(payload: unknown): Promise<{ id: string } 
   if (erroPedidos) return { erro: erroPedidos.message }
   if (!pedidos?.length) return { erro: 'Cotação própria não encontrada.' }
 
-  const pedidoPorCodigo = new Map(pedidos.map((x) => [x.codigo, x]))
+  // Código ou insumo em mais de uma linha da cotação: vale a primeira linha
+  const pedidoPorId = new Map(pedidos.map((x) => [x.id, x]))
+  const pedidoPorCodigo = new Map<string, (typeof pedidos)[number]>()
   const pedidoPorInsumo = new Map<string, (typeof pedidos)[number]>()
-  for (const x of pedidos) if (!pedidoPorInsumo.has(x.insumo_id)) pedidoPorInsumo.set(x.insumo_id, x)
+  for (const x of pedidos) {
+    if (!pedidoPorCodigo.has(x.codigo)) pedidoPorCodigo.set(x.codigo, x)
+    if (!pedidoPorInsumo.has(x.insumo_id)) pedidoPorInsumo.set(x.insumo_id, x)
+  }
 
   // Descrição que o comprador já confirmou antes vale mais que a leitura da IA
   const sinonimos = await emLotes([...pedidoPorInsumo.keys()], (lote) =>
@@ -148,7 +156,8 @@ export async function salvarOrcamento(payload: unknown): Promise<{ id: string } 
   const linhas = itens.map((i) => {
     const porSinonimo = i.conferido ? undefined : insumoPorDescricao.get(chaveDescricao(i.descricao))
     const pedidoSinonimo = porSinonimo ? pedidoPorInsumo.get(porSinonimo) : undefined
-    const pedido = pedidoSinonimo ?? (i.codigo_pedido ? pedidoPorCodigo.get(i.codigo_pedido) : undefined)
+    const escolhido = i.conferido && i.pedidoId ? pedidoPorId.get(i.pedidoId) : undefined
+    const pedido = escolhido ?? pedidoSinonimo ?? (i.codigo_pedido ? pedidoPorCodigo.get(i.codigo_pedido) : undefined)
     const origem = i.conferido ? 'comprador' : pedidoSinonimo ? 'sinonimo' : 'ia'
     return {
       cotacao_id: orcamento.id,

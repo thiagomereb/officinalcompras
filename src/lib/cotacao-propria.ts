@@ -32,7 +32,7 @@ export type CotacaoPropriaLida = {
   // ISO com o fuso de Brasília, como o relatório imprime
   emitidaEm: string | null
   itens: ItemCotacaoPropria[]
-  // O que a leitura ajustou e o comprador deve saber (produto repetido, teor impossível)
+  // O que a leitura ajustou e o comprador deve saber (teor impossível, linha não lida)
   avisos: string[]
   // Produtos que a IA leu, com a linha de onde vieram, para o comprador conferir
   lidosPelaIa: { item: ItemCotacaoPropria; linha: string }[]
@@ -112,7 +112,6 @@ function itemDaLinha(linha: string): { item: ItemCotacaoPropria; teorImpossivel:
   }
 }
 
-const quantidadeBR = (q: number) => q.toLocaleString('pt-BR', { maximumFractionDigits: 4 })
 
 function emitidaEm(linhas: string[]): string | null {
   for (const l of linhas) {
@@ -198,8 +197,8 @@ const listarLinhas = (linhas: LinhaNaoLida[]) =>
     .map(({ texto: l }) => `"${l.length > 100 ? `${l.slice(0, 100)}…` : l}"`)
     .join('; ')}${linhas.length > 5 ? ` e mais ${linhas.length - 5}` : ''}`
 
-// Segunda etapa: junta o que a IA leu (na posição da linha no PDF), confere com
-// o rodapé e soma os produtos repetidos. erroIa: por que a IA não leu, se falhou.
+// Segunda etapa: junta o que a IA leu (na posição da linha no PDF) e confere
+// com o rodapé. erroIa: por que a IA não leu, se falhou.
 export function concluirCotacaoPropria(
   parcial: LeituraParcial,
   pelaIa: ItemLidoPelaIa[] = [],
@@ -228,7 +227,7 @@ export function concluirCotacaoPropria(
   const { totalDeclarado } = parcial
   const porqueIa = erroIa ? ` A leitura dessas linhas pela IA também falhou: ${erroIa}` : ''
   if (lidos.length === 0) return { ok: false, erro: `Não encontrei nenhum produto no PDF.${porqueIa}` }
-  // O rodapé conta linhas: a conferência é antes de juntar os repetidos
+  // O rodapé conta linhas, inclusive as do mesmo produto
   if (totalDeclarado != null && totalDeclarado !== lidos.length) {
     const quais = naoLidas.length ? ` Linha(s) que não consegui ler: ${listarLinhas(naoLidas)}.` : ''
     return {
@@ -241,40 +240,15 @@ export function concluirCotacaoPropria(
     avisos.push(`${naoLidas.length} linha(s) parecem produto e não foram lidas: ${listarLinhas(naoLidas)}.`)
   }
 
-  // O mesmo produto em mais de uma linha (pedidos somados no sistema): uma só
-  // linha com a soma, se a unidade for a mesma
-  const porCodigo = new Map<string, { item: ItemCotacaoPropria; partes: number[] }>()
-  for (const item of lidos) {
-    const atual = porCodigo.get(item.codigo)
-    if (!atual) {
-      porCodigo.set(item.codigo, { item: { ...item }, partes: [item.quantidade] })
-      continue
-    }
-    if (atual.item.unidade !== item.unidade) {
-      return {
-        ok: false,
-        erro: `O produto ${item.codigo} aparece mais de uma vez, em unidades diferentes (${atual.item.unidade} e ${item.unidade}).`,
-      }
-    }
-    atual.partes.push(item.quantidade)
-    atual.item.quantidade = Math.round((atual.item.quantidade + item.quantidade) * 10000) / 10000
-    atual.item.observacao = [atual.item.observacao, item.observacao].filter(Boolean).join(' / ') || null
-  }
-  for (const { item, partes } of porCodigo.values()) {
-    if (partes.length > 1) {
-      avisos.push(
-        `${item.codigo} - ${item.nome} aparece ${partes.length} vezes: quantidades somadas (${partes.map(quantidadeBR).join(' + ')} = ${quantidadeBR(item.quantidade)} ${item.unidade}).`,
-      )
-    }
-  }
-
+  // A cotação fica exatamente como o relatório: o mesmo produto em mais de uma
+  // linha continua em linhas separadas (quem pediu separou por algum motivo)
   return {
     ok: true,
     cotacao: {
       numero: parcial.numero,
       unidade: parcial.unidade,
       emitidaEm: parcial.emitidaEm,
-      itens: [...porCodigo.values()].map((p) => p.item),
+      itens: lidos,
       avisos,
       lidosPelaIa,
     },
