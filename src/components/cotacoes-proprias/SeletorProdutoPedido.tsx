@@ -47,8 +47,16 @@ export function SeletorProdutoPedido({ pedidos, pendente = false, sugestao = '',
           onChange={(e) => setTermo(e.target.value)}
           onFocus={(e) => e.target.select()}
           onKeyDown={(e) => {
-            if (e.key === 'Escape') onCancelar()
-            if (e.key === 'Enter' && opcoes[0]) onEscolher(opcoes[0].produto)
+            if (e.key === 'Escape') {
+              // Dentro de um modal, o Esc fecha só a busca
+              e.stopPropagation()
+              onCancelar()
+            }
+            if (e.key === 'Enter') {
+              // Dentro de um formulário, o Enter escolhe em vez de enviar
+              e.preventDefault()
+              if (opcoes[0]) onEscolher(opcoes[0].produto)
+            }
           }}
           placeholder="Buscar produto pedido por nome, código ou sinônimo…"
           aria-label="Buscar produto pedido"
@@ -60,6 +68,7 @@ export function SeletorProdutoPedido({ pedidos, pendente = false, sugestao = '',
         {opcoes.map(({ produto, viaSinonimo }) => (
           <li key={produto.id}>
             <button
+              type="button"
               onClick={() => onEscolher(produto)}
               disabled={pendente}
               className="flex w-full flex-col px-3 py-1.5 text-left text-[13px] hover:bg-nevoa"
@@ -80,10 +89,10 @@ export function SeletorProdutoPedido({ pedidos, pendente = false, sugestao = '',
         )}
       </ul>
       <div className="flex items-center gap-1">
-        <button onClick={() => onEscolher(null)} disabled={pendente} className="btn btn-fantasma btn-sm">
+        <button type="button" onClick={() => onEscolher(null)} disabled={pendente} className="btn btn-fantasma btn-sm">
           Não foi pedido
         </button>
-        <button onClick={onCancelar} disabled={pendente} className="btn btn-fantasma btn-sm">
+        <button type="button" onClick={onCancelar} disabled={pendente} className="btn btn-fantasma btn-sm">
           Cancelar
         </button>
         {pendente && <span className="girador text-ardosia" aria-label="Salvando" />}

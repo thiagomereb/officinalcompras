@@ -9,6 +9,7 @@ import { ehFornecedorDeCompra } from '@/lib/fornecedores'
 import type { FornecedorCadastro } from '@/lib/reconhecer-fornecedor'
 import type { ProdutoPedidoOpcao } from '@/lib/busca-pedidos'
 import { chaveDescricao, itemParaGravar, itemValido, soDigitos } from '@/lib/orcamento'
+import { ehUnidadeEmbalagem, normalizarUnidade } from '@/lib/unidades'
 import type { Falha } from '@/lib/acoes'
 import type { Json } from '@/types/database'
 
@@ -295,6 +296,96 @@ async function desfazerEscolhasEmRascunho(
   const { error: erroExclusao } = await supabase.from('mapa_cotacao_itens').delete().in('id', rascunho)
   if (erroExclusao) return { erro: erroExclusao.message }
   revalidatePath('/mapas', 'layout')
+}
+
+// Item que a leitura não trouxe, digitado pelo comprador a partir do orçamento
+export async function incluirItemNoOrcamento(payload: unknown): Promise<Falha | { descricao: string; pedido: string | null }> {
+  const p = (payload ?? {}) as Record<string, unknown>
+  const orcamentoId = texto(p.orcamentoId, 36)
+  const cotacaoPropriaId = texto(p.cotacaoPropriaId, 36)
+  const pedidoId = p.pedidoId == null ? null : texto(p.pedidoId, 36)
+  const descricao = texto(p.descricao, 500)
+  const embalagem = Number(p.embalagem)
+  const unidade = normalizarUnidade(typeof p.unidade === 'string' ? p.unidade : null)
+  const embalagens = Number(p.embalagens)
+  const preco = Number(p.preco)
+  const validade = p.validade == null ? null : texto(p.validade, 10)
+  const ipi = p.ipi == null ? null : Number(p.ipi)
+
+  if (!orcamentoId || !UUID.test(orcamentoId) || !cotacaoPropriaId || !UUID.test(cotacaoPropriaId)) return { erro: 'Orçamento inválido.' }
+  if (p.pedidoId != null && (!pedidoId || !UUID.test(pedidoId))) return { erro: 'Produto pedido inválido.' }
+  if (!descricao) return { erro: 'Informe a descrição do item, como está no orçamento.' }
+  if (!(Number.isFinite(embalagem) && embalagem > 0)) return { erro: 'Informe o tamanho da embalagem.' }
+  if (!ehUnidadeEmbalagem(unidade)) return { erro: 'Unidade da embalagem inválida.' }
+  if (!(Number.isFinite(embalagens) && embalagens > 0)) return { erro: 'Informe quantas embalagens foram cotadas.' }
+  if (!(Number.isFinite(preco) && preco > 0)) return { erro: 'Informe o preço da embalagem.' }
+  if (p.validade != null && (!validade || !/^\d{4}-\d{2}-\d{2}$/.test(validade))) return { erro: 'Validade inválida.' }
+  if (ipi != null && !(Number.isFinite(ipi) && ipi >= 0 && ipi <= 100)) return { erro: 'O IPI vai de 0 a 100%.' }
+
+  const supabase = await createClient()
+  const [{ data: orcamento }, { data: pedido }] = await Promise.all([
+    supabase.from('cotacoes').select('id').eq('id', orcamentoId).eq('cotacao_propria_id', cotacaoPropriaId).maybeSingle(),
+    pedidoId
+      ? supabase.from('cotacao_propria_itens').select('insumo_id, nome').eq('id', pedidoId).eq('cotacao_propria_id', cotacaoPropriaId).maybeSingle()
+      : Promise.resolve({ data: null }),
+  ])
+  if (!orcamento) return { erro: 'Orçamento não encontrado nesta cotação.' }
+  if (pedidoId && !pedido) return { erro: 'Produto pedido não encontrado nesta cotação.' }
+
+  const { error } = await supabase.from('cotacao_itens').insert({
+    cotacao_id: orcamentoId,
+    descricao_original: descricao,
+    preco_unitario: Math.round(preco * 10000) / 10000,
+    quantidade_minima: embalagem,
+    quantidade: embalagens,
+    unidade,
+    validade,
+    ipi: ipi ?? 0,
+    st: 0,
+    cotacao_propria_item_id: pedidoId,
+    insumo_id: pedido?.insumo_id ?? null,
+    // O comprador decidiu o vínculo (ou que não foi pedido): nada a conferir
+    vinculo_origem: 'comprador',
+    vinculo_obs: null,
+  })
+  if (error) return { erro: error.message }
+
+  if (pedido) await aprender(supabase, [{ descricao, insumo_id: pedido.insumo_id }])
+  revalidatePath(caminho(cotacaoPropriaId, orcamentoId))
+  revalidatePath(caminho(cotacaoPropriaId))
+  revalidatePath('/mapas', 'layout')
+  return { descricao, pedido: pedido?.nome ?? null }
+}
+
+// Desfaz uma inclusão à mão. Os itens que a leitura trouxe ficam: são o que o
+// fornecedor mandou. A leitura grava todos de uma vez, no mesmo instante, então
+// incluído à mão é o que tem outro horário.
+export async function removerItemIncluido(itemId: string, orcamentoId: string, cotacaoPropriaId: string): Promise<Falha | void> {
+  if (![itemId, orcamentoId, cotacaoPropriaId].every((id) => UUID.test(id))) return { erro: 'Item inválido.' }
+  const supabase = await createClient()
+
+  const [{ data: orcamento }, { data: item }, { data: primeiro }] = await Promise.all([
+    supabase.from('cotacoes').select('id').eq('id', orcamentoId).eq('cotacao_propria_id', cotacaoPropriaId).maybeSingle(),
+    supabase.from('cotacao_itens').select('created_at').eq('id', itemId).eq('cotacao_id', orcamentoId).maybeSingle(),
+    supabase
+      .from('cotacao_itens')
+      .select('created_at')
+      .eq('cotacao_id', orcamentoId)
+      .order('created_at', { ascending: true })
+      .limit(1)
+      .maybeSingle(),
+  ])
+  if (!orcamento || !item) return { erro: 'Item não encontrado neste orçamento.' }
+  if (!item.created_at || item.created_at === primeiro?.created_at) return { erro: 'Só sai do orçamento o item incluído à mão.' }
+
+  // Escolhido num mapa aprovado é registro de compra; em rascunho, a escolha sai junto
+  const desfeitas = await desfazerEscolhasEmRascunho(supabase, { itemId }, true)
+  if (desfeitas) return desfeitas
+
+  const { error } = await supabase.from('cotacao_itens').delete().eq('id', itemId)
+  if (error) return { erro: error.message }
+  revalidatePath(caminho(cotacaoPropriaId, orcamentoId))
+  revalidatePath(caminho(cotacaoPropriaId))
 }
 
 export async function excluirOrcamento(orcamentoId: string, cotacaoPropriaId: string): Promise<Falha | void> {

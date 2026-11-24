@@ -7,6 +7,7 @@ import { BuscaInsumo } from '@/components/ui/BuscaInsumo'
 import { createClient } from '@/lib/supabase/client'
 import type { InsumoOpcao } from '@/lib/supabase/busca-insumos'
 import { UNIDADES_QUANTIDADE, ehUnidadeQuantidade, normalizarUnidade, type UnidadeQuantidade } from '@/lib/unidades'
+import { numeroDigitado } from '@/lib/numero'
 import type { Falha } from '@/lib/acoes'
 
 type Incluido = { codigo: string; nome: string; ofertas: number }
@@ -18,13 +19,7 @@ interface Props {
   bloqueio: string | null
 }
 
-// "1.234,5", "1234,5" ou "1234.5"; null quando vazio ou inválido
-function numeroBR(v: string): number | null {
-  const t = v.trim()
-  if (!t) return null
-  const n = Number(t.includes(',') ? t.replace(/\./g, '').replace(',', '.') : t)
-  return Number.isFinite(n) ? n : null
-}
+const numeroBR = numeroDigitado
 
 // Produto que faltou na cotação gerada pelo sistema da farmácia. O modal fica
 // aberto depois de incluir, para emendar o próximo

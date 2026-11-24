@@ -79,6 +79,14 @@ export function ehUnidadeQuantidade(u: unknown): u is UnidadeQuantidade {
   return typeof u === 'string' && (UNIDADES_QUANTIDADE as readonly string[]).includes(u)
 }
 
+// Unidades do tamanho da embalagem num item de orçamento digitado à mão
+export const UNIDADES_EMBALAGEM = ['mg', 'g', 'kg', 'mL', 'L', 'un', 'mil', 'UI'] as const
+export type UnidadeEmbalagem = (typeof UNIDADES_EMBALAGEM)[number]
+
+export function ehUnidadeEmbalagem(u: unknown): u is UnidadeEmbalagem {
+  return typeof u === 'string' && (UNIDADES_EMBALAGEM as readonly string[]).includes(u)
+}
+
 // Quantidade comprada convertida para a base da grandeza (g ou mL)
 export function quantidadeNaBase(quantidade: number, unidade: UnidadeQuantidade): { valor: number; base: string } {
   const conv = PARA_BASE[unidade]

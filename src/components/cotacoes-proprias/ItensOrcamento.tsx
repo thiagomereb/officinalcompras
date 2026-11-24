@@ -1,10 +1,14 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { Check, Pencil, Search } from 'lucide-react'
+import { Check, Pencil, Search, Trash2 } from 'lucide-react'
 import { precoPorUnidadeBase } from '@/lib/unidades'
 import { LeituraPreco } from '@/components/ui/LeituraPreco'
-import type { alterarVinculoOrcamento, confirmarSugestoes } from '@/app/(dashboard)/cotacoes-proprias/orcamentos-actions'
+import type {
+  alterarVinculoOrcamento,
+  confirmarSugestoes,
+  removerItemIncluido,
+} from '@/app/(dashboard)/cotacoes-proprias/orcamentos-actions'
 import { QuantidadePedida, SeletorProdutoPedido, type ProdutoPedidoOpcao } from './SeletorProdutoPedido'
 
 export type ItemOrcamento = {
@@ -20,6 +24,8 @@ export type ItemOrcamento = {
   pedido: ProdutoPedidoOpcao | null
   origem: 'ia' | 'sinonimo' | 'comprador' | null
   obs: string | null
+  // Não veio na leitura: o comprador incluiu depois
+  manual: boolean
 }
 
 interface Props {
@@ -29,6 +35,9 @@ interface Props {
   cotacaoPropriaId: string
   alterar: typeof alterarVinculoOrcamento
   confirmar: typeof confirmarSugestoes
+  remover: typeof removerItemIncluido
+  // Botão de incluir item, no topo da lista
+  incluir?: React.ReactNode
 }
 
 type Filtro = 'todos' | 'conferir' | 'fora'
@@ -36,7 +45,7 @@ type Filtro = 'todos' | 'conferir' | 'fora'
 const moeda = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 const data = (d: string) => new Date(d + 'T12:00:00').toLocaleDateString('pt-BR')
 
-export function ItensOrcamento({ itens, pedidos, orcamentoId, cotacaoPropriaId, alterar, confirmar }: Props) {
+export function ItensOrcamento({ itens, pedidos, orcamentoId, cotacaoPropriaId, alterar, confirmar, remover, incluir }: Props) {
   const [filtro, setFiltro] = useState<Filtro>(() => (itens.some((i) => i.origem === 'ia') ? 'conferir' : 'todos'))
   const [busca, setBusca] = useState('')
   const [editando, setEditando] = useState<string | null>(null)
@@ -56,6 +65,15 @@ export function ItensOrcamento({ itens, pedidos, orcamentoId, cotacaoPropriaId, 
       const r = await alterar(itemId, pedidoId, orcamentoId, cotacaoPropriaId)
       if (r?.erro) setErro(r.erro)
       else setEditando(null)
+    })
+  }
+
+  function tirar(i: ItemOrcamento) {
+    if (!confirm(`Tirar do orçamento o item "${i.descricao}"?`)) return
+    setErro(null)
+    startTransition(async () => {
+      const r = await remover(i.id, orcamentoId, cotacaoPropriaId)
+      if (r?.erro) setErro(r.erro)
     })
   }
 
@@ -106,6 +124,7 @@ export function ItensOrcamento({ itens, pedidos, orcamentoId, cotacaoPropriaId, 
               Confirmar as {aConferir.length} sugestões
             </button>
           )}
+          {incluir}
         </div>
       </div>
 
@@ -147,8 +166,26 @@ export function ItensOrcamento({ itens, pedidos, orcamentoId, cotacaoPropriaId, 
                 return (
                   <tr key={i.id} className="group/linha align-top">
                     <td className="max-w-[280px]">
-                      <div className="truncate" title={i.descricao}>
-                        {i.descricao}
+                      <div className="flex items-center gap-1">
+                        <span className="truncate" title={i.descricao}>
+                          {i.descricao}
+                        </span>
+                        {i.manual && (
+                          <>
+                            <span className="selo h-5 shrink-0 px-1.5 text-[11px]" title="Não veio na leitura: foi incluído depois">
+                              incluído à mão
+                            </span>
+                            <button
+                              onClick={() => tirar(i)}
+                              disabled={pendente}
+                              className="btn btn-fantasma btn-icone btn-sm h-6 w-6 shrink-0"
+                              title="Tirar do orçamento"
+                              aria-label={`Tirar ${i.descricao} do orçamento`}
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          </>
+                        )}
                       </div>
                       {i.obs && (
                         <div className={`whitespace-normal text-[11.5px] ${i.pedido ? 'text-oxido' : 'text-ardosia'}`}>{i.obs}</div>

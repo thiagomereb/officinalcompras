@@ -7,8 +7,15 @@ import { carregarPedidosComSinonimos } from '@/lib/pedidos'
 import { Cabecalho } from '@/components/ui/Cabecalho'
 import { CotacaoForm } from '@/components/cotacoes/CotacaoForm'
 import { ItensOrcamento, type ItemOrcamento } from '@/components/cotacoes-proprias/ItensOrcamento'
+import { IncluirItemOrcamento } from '@/components/cotacoes-proprias/IncluirItemOrcamento'
 import { atualizarCotacao } from '@/app/(dashboard)/cotacoes/actions'
-import { alterarVinculoOrcamento, confirmarSugestoes, excluirOrcamento } from '../../../orcamentos-actions'
+import {
+  alterarVinculoOrcamento,
+  confirmarSugestoes,
+  excluirOrcamento,
+  incluirItemNoOrcamento,
+  removerItemIncluido,
+} from '../../../orcamentos-actions'
 import { ExcluirOrcamentoButton } from './ExcluirOrcamentoButton'
 
 const moeda = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
@@ -33,7 +40,7 @@ export default async function OrcamentoPage({ params }: { params: Promise<{ id: 
     buscarTodos((de, ate) =>
       supabase
         .from('cotacao_itens')
-        .select('id, descricao_original, preco_unitario, quantidade_minima, quantidade, unidade, validade, pais_origem, ipi, st, vinculo_origem, vinculo_obs, cotacao_propria_item_id')
+        .select('id, descricao_original, preco_unitario, quantidade_minima, quantidade, unidade, validade, pais_origem, ipi, st, vinculo_origem, vinculo_obs, cotacao_propria_item_id, created_at')
         .eq('cotacao_id', orcamentoId)
         .order('created_at')
         .order('id')
@@ -45,6 +52,9 @@ export default async function OrcamentoPage({ params }: { params: Promise<{ id: 
   ])
 
   const pedidoPorId = new Map(pedidos.map((p) => [p.id, p]))
+  // A leitura grava todos os itens de uma vez, no mesmo instante (o primeiro);
+  // item com outro horário foi incluído à mão depois
+  const lidosEm = itensRaw.reduce<string | null>((min, i) => (i.created_at && (!min || i.created_at < min) ? i.created_at : min), null)
   const itens: ItemOrcamento[] = itensRaw.map((i) => ({
     id: i.id,
     descricao: i.descricao_original,
@@ -58,6 +68,7 @@ export default async function OrcamentoPage({ params }: { params: Promise<{ id: 
     pedido: i.cotacao_propria_item_id ? (pedidoPorId.get(i.cotacao_propria_item_id) ?? null) : null,
     origem: i.vinculo_origem as ItemOrcamento['origem'],
     obs: i.vinculo_obs,
+    manual: !!i.created_at && !!lidosEm && new Date(i.created_at).getTime() !== new Date(lidosEm).getTime(),
   }))
 
   // Confere se a leitura pegou todos os itens: o documento pode trazer o total com ou sem impostos
@@ -143,6 +154,15 @@ export default async function OrcamentoPage({ params }: { params: Promise<{ id: 
         cotacaoPropriaId={id}
         alterar={alterarVinculoOrcamento}
         confirmar={confirmarSugestoes}
+        remover={removerItemIncluido}
+        incluir={
+          <IncluirItemOrcamento
+            orcamentoId={orcamentoId}
+            cotacaoPropriaId={id}
+            pedidos={pedidos}
+            incluir={incluirItemNoOrcamento}
+          />
+        }
       />
     </div>
   )
