@@ -286,6 +286,103 @@ export async function incluirProdutoNaCotacao(payload: unknown): Promise<Falha |
   return { codigo, nome: insumo.nome, ofertas }
 }
 
+// Corrige um produto do pedido: o insumo ligado, o código, o teor e a
+// quantidade. Trocar o insumo leva junto as ofertas dos orçamentos ligadas a
+// ele (a escolha delas num mapa em rascunho é desfeita). Linha incluída à mão
+// passa a ter o nome do insumo novo; a que veio no PDF guarda o nome do relatório.
+export async function editarProdutoDaCotacao(payload: unknown): Promise<Falha | { nome: string }> {
+  const p = (payload ?? {}) as Record<string, unknown>
+  const cotacaoPropriaId = texto(p.cotacaoPropriaId, 36)
+  const itemId = texto(p.itemId, 36)
+  const insumoId = texto(p.insumoId, 36)
+  const codigo = texto(p.codigo, 15)
+  const unidade = normalizarUnidade(typeof p.unidade === 'string' ? p.unidade : null)
+  const teor = p.teor == null ? null : Number(p.teor)
+  const quantidade = Number(p.quantidade)
+
+  if (!cotacaoPropriaId || !UUID.test(cotacaoPropriaId) || !itemId || !UUID.test(itemId)) return { erro: 'Produto inválido.' }
+  if (!insumoId || !UUID.test(insumoId)) return { erro: 'Escolha o insumo do cadastro.' }
+  if (!codigo || !/^\d+$/.test(codigo)) return { erro: 'Informe o código do produto no sistema da farmácia (só números).' }
+  if (teor != null && !(Number.isFinite(teor) && teor >= 0 && teor <= 100)) return { erro: 'O teor vai de 0 a 100%.' }
+  if (!(Number.isFinite(quantidade) && quantidade > 0)) return { erro: 'Informe a quantidade pedida.' }
+  if (!ehUnidadeQuantidade(unidade)) return { erro: 'Unidade inválida.' }
+
+  const supabase = await createClient()
+  const [{ data: cotacao }, fechado, { data: linha }, { data: insumo }] = await Promise.all([
+    supabase.from('cotacoes_proprias').select('id, unidade, created_at').eq('id', cotacaoPropriaId).maybeSingle(),
+    temMapaFechado(supabase, cotacaoPropriaId),
+    supabase
+      .from('cotacao_propria_itens')
+      .select('id, codigo, nome, insumo_id, created_at')
+      .eq('id', itemId)
+      .eq('cotacao_propria_id', cotacaoPropriaId)
+      .maybeSingle(),
+    supabase.from('insumos').select('id, nome_padrao').eq('id', insumoId).maybeSingle(),
+  ])
+  if (!cotacao || !linha) return { erro: 'Produto não encontrado nesta cotação.' }
+  if (fechado) return { erro: MAPA_FECHADO }
+  if (!insumo) return { erro: 'Insumo não encontrado no cadastro.' }
+
+  // O código, nesta unidade, não pode ser de outro insumo
+  const chave = chaveUnidade(cotacao.unidade)
+  const { data: dono } = await supabase
+    .from('insumo_codigos')
+    .select('insumo_id, insumos(nome_padrao)')
+    .eq('unidade', chave)
+    .eq('codigo', codigo)
+    .maybeSingle()
+  if (dono && dono.insumo_id !== insumo.id) {
+    const nome = (dono.insumos as { nome_padrao: string } | null)?.nome_padrao ?? 'outro insumo'
+    return { erro: `Na unidade ${nomeCurtoUnidade(cotacao.unidade)}, o código ${codigo} é de ${nome}. Corrija na página desse insumo.` }
+  }
+
+  const trocouInsumo = linha.insumo_id !== insumo.id
+  if (trocouInsumo) {
+    // As ofertas desta linha mudam de insumo: a escolha num mapa em rascunho sai
+    const { data: ofertas } = await supabase.from('cotacao_itens').select('id').eq('cotacao_propria_item_id', itemId)
+    const ids = (ofertas ?? []).map((o) => o.id)
+    if (ids.length) {
+      const { data: escolhas } = await supabase
+        .from('mapa_cotacao_itens')
+        .select('id, mapas_cotacao(status)')
+        .in('cotacao_item_id', ids)
+      const emRascunho = (escolhas ?? [])
+        .filter((e) => (e.mapas_cotacao as { status: string } | null)?.status === 'rascunho')
+        .map((e) => e.id)
+      if (emRascunho.length) {
+        const { error } = await supabase.from('mapa_cotacao_itens').delete().in('id', emRascunho)
+        if (error) return { erro: error.message }
+      }
+      const { error } = await supabase.from('cotacao_itens').update({ insumo_id: insumo.id }).in('id', ids)
+      if (error) return { erro: error.message }
+    }
+  }
+
+  const manual = incluidoAMao(linha.created_at, cotacao.created_at)
+  const { error } = await supabase
+    .from('cotacao_propria_itens')
+    .update({
+      insumo_id: insumo.id,
+      codigo,
+      teor,
+      quantidade,
+      unidade,
+      nome: manual ? insumo.nome_padrao : linha.nome,
+    })
+    .eq('id', itemId)
+  if (error) return { erro: error.message }
+
+  if (!dono) {
+    const { error: erroCodigo } = await supabase.from('insumo_codigos').insert({ unidade: chave, codigo, insumo_id: insumo.id })
+    if (erroCodigo) console.warn(`[cotacao-propria] não foi possível gravar o código ${codigo} do insumo: ${erroCodigo.message}`)
+  }
+
+  revalidatePath('/cotacoes-proprias', 'layout')
+  revalidatePath('/mapas', 'layout')
+  revalidatePath(`/insumos/${insumo.id}`)
+  return { nome: manual ? insumo.nome_padrao : linha.nome }
+}
+
 // Desfaz uma inclusão à mão. Os produtos que vieram no PDF ficam: são o pedido
 // do sistema da farmácia
 export async function removerProdutoIncluido(itemId: string, cotacaoPropriaId: string): Promise<Falha | void> {

@@ -16,7 +16,7 @@ import { AdicionarOrcamento } from '@/components/cotacoes-proprias/AdicionarOrca
 import { IncluirProduto } from '@/components/cotacoes-proprias/IncluirProduto'
 import { incluidoAMao } from '@/lib/pedidos'
 import { ExcluirCotacaoPropriaButton } from './ExcluirCotacaoPropriaButton'
-import { excluirCotacaoPropria, incluirProdutoNaCotacao, removerProdutoIncluido } from '../actions'
+import { editarProdutoDaCotacao, excluirCotacaoPropria, incluirProdutoNaCotacao, removerProdutoIncluido } from '../actions'
 import { dadosParaNovoOrcamento, salvarOrcamento } from '../orcamentos-actions'
 
 const moeda = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
@@ -42,7 +42,7 @@ export default async function CotacaoPropriaPage({
     buscarTodos((de, ate) =>
       supabase
         .from('cotacao_propria_itens')
-        .select('id, codigo, ean, nome, teor, quantidade, unidade, insumo_id, created_at, insumos(created_at)')
+        .select('id, codigo, ean, nome, teor, quantidade, unidade, insumo_id, created_at, insumos(created_at, nome_padrao)')
         .eq('cotacao_propria_id', id)
         .order('ordem')
         .range(de, ate),
@@ -121,6 +121,7 @@ export default async function CotacaoPropriaPage({
   const criadoEm = new Date(cotacao.created_at).getTime()
   const produtos: ProdutoPedido[] = itens.map(({ insumos, created_at, ...p }) => ({
     ...p,
+    insumo_nome: insumos?.nome_padrao ?? p.nome,
     novo_no_cadastro: !!insumos?.created_at && new Date(insumos.created_at).getTime() === criadoEm,
     incluido_a_mao: incluidoAMao(created_at, cotacao.created_at),
   }))
@@ -267,6 +268,8 @@ export default async function CotacaoPropriaPage({
           />
         }
         remover={fechada ? undefined : removerProdutoIncluido}
+        editar={fechada ? undefined : editarProdutoDaCotacao}
+        unidadeCotacao={cotacao.unidade}
       />
     </div>
   )

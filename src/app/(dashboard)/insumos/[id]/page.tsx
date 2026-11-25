@@ -5,7 +5,9 @@ import type { Tables } from '@/types/database'
 import { InsumoForm } from '@/components/insumos/InsumoForm'
 import { Cabecalho } from '@/components/ui/Cabecalho'
 import { LeituraPreco } from '@/components/ui/LeituraPreco'
-import { atualizarInsumo, excluirInsumo } from '../actions'
+import { CodigosInsumo } from '@/components/insumos/CodigosInsumo'
+import { chaveUnidade, nomeCurtoUnidade } from '@/lib/unidades-farmacia'
+import { alterarCodigoInsumo, atualizarInsumo, excluirInsumo } from '../actions'
 import { ExcluirInsumoButton } from './ExcluirInsumoButton'
 
 type Insumo = Tables<'insumos'>
@@ -16,7 +18,7 @@ export default async function EditarInsumoPage({ params }: { params: Promise<{ i
   const { id } = await params
   const supabase = await createClient()
 
-  const [insumoRes, sinonimosRes, comprasRes] = await Promise.all([
+  const [insumoRes, sinonimosRes, comprasRes, codigosRes, cotacoesRes] = await Promise.all([
     supabase.from('insumos').select('*').eq('id', id).single(),
     supabase.from('insumo_sinonimos').select('*').eq('insumo_id', id).order('sinonimo'),
     supabase
@@ -25,6 +27,9 @@ export default async function EditarInsumoPage({ params }: { params: Promise<{ i
       .eq('insumo_id', id)
       .order('aprovado_em', { ascending: false })
       .limit(10),
+    supabase.from('insumo_codigos').select('unidade, codigo').eq('insumo_id', id).order('codigo'),
+    // As unidades da farmácia que já mandaram cotação
+    supabase.from('cotacoes_proprias').select('unidade'),
   ])
 
   const insumo = insumoRes.data as Insumo | null
@@ -32,6 +37,14 @@ export default async function EditarInsumoPage({ params }: { params: Promise<{ i
 
   const action = atualizarInsumo.bind(null, id)
   const compras = comprasRes.data ?? []
+  const codigos = codigosRes.data ?? []
+  const chaves = new Set([
+    ...(cotacoesRes.data ?? []).map((c) => chaveUnidade(c.unidade)).filter(Boolean),
+    ...codigos.map((c) => c.unidade),
+  ])
+  const unidades = [...chaves]
+    .map((chave) => ({ chave, nome: nomeCurtoUnidade(chave) }))
+    .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
 
   return (
     <div className="pagina">
@@ -46,6 +59,11 @@ export default async function EditarInsumoPage({ params }: { params: Promise<{ i
         <div className="painel p-5 lg:p-7">
           <InsumoForm insumo={insumo} sinonimos={sinonimosRes.data ?? []} action={action} />
         </div>
+
+        <div className="grid gap-5">
+        {unidades.length > 0 && (
+          <CodigosInsumo insumoId={id} unidades={unidades} codigos={codigos} alterar={alterarCodigoInsumo} />
+        )}
 
         <section className="painel">
           <div className="painel-topo">
@@ -94,6 +112,7 @@ export default async function EditarInsumoPage({ params }: { params: Promise<{ i
             </ul>
           )}
         </section>
+        </div>
       </div>
     </div>
   )

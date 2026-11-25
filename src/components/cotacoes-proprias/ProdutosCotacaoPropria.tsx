@@ -2,7 +2,8 @@
 
 import { useMemo, useState, useTransition } from 'react'
 import Link from 'next/link'
-import { Check, Search, Trash2 } from 'lucide-react'
+import { Check, Pencil, Search, Trash2 } from 'lucide-react'
+import { EditarProdutoCotacao, type EditarProduto } from './EditarProdutoCotacao'
 import { LeituraPreco } from '@/components/ui/LeituraPreco'
 import { melhorDoFornecedor, resumirProduto, type OfertaProduto, type ResumoProduto } from '@/lib/ofertas-cotacao'
 import type { Falha } from '@/lib/acoes'
@@ -16,6 +17,7 @@ export type ProdutoPedido = {
   quantidade: number
   unidade: string
   insumo_id: string
+  insumo_nome: string
   // O insumo entrou no cadastro com esta importação
   novo_no_cadastro: boolean
   // Não veio no PDF: o comprador incluiu depois
@@ -35,6 +37,10 @@ interface Props {
   incluir?: React.ReactNode
   // Tira da cotação um produto incluído à mão; ausente quando ela não muda mais
   remover?: Remover
+  // Corrige um produto do pedido; ausente quando a cotação não muda mais
+  editar?: EditarProduto
+  // A unidade da farmácia da cotação (o código do produto é o desta unidade)
+  unidadeCotacao?: string | null
 }
 
 type Situacao = 'todos' | 'com' | 'sem'
@@ -66,7 +72,7 @@ function RemoverIncluido({ p, cotacaoPropriaId, remover }: { p: ProdutoPedido; c
   )
 }
 
-function NomeProduto({ p, remocao }: { p: ProdutoPedido; remocao?: React.ReactNode }) {
+function NomeProduto({ p, remocao, edicao }: { p: ProdutoPedido; remocao?: React.ReactNode; edicao?: React.ReactNode }) {
   return (
     <>
       <Link href={`/insumos/${p.insumo_id}`} className="hover:underline">
@@ -82,12 +88,23 @@ function NomeProduto({ p, remocao }: { p: ProdutoPedido; remocao?: React.ReactNo
           incluído à mão
         </span>
       )}
+      {edicao}
       {remocao}
     </>
   )
 }
 
-export function ProdutosCotacaoPropria({ cotacaoPropriaId, produtos, ofertas, fornecedores, incluir, remover }: Props) {
+export function ProdutosCotacaoPropria({
+  cotacaoPropriaId,
+  produtos,
+  ofertas,
+  fornecedores,
+  incluir,
+  remover,
+  editar,
+  unidadeCotacao = null,
+}: Props) {
+  const [editando, setEditando] = useState<ProdutoPedido | null>(null)
   const [fornecedor, setFornecedor] = useState<string>(TODOS)
   const [situacao, setSituacao] = useState<Situacao>('todos')
   const [busca, setBusca] = useState('')
@@ -138,6 +155,15 @@ export function ProdutosCotacaoPropria({ cotacaoPropriaId, produtos, ofertas, fo
 
   return (
     <section className="painel">
+      {editando && editar && (
+        <EditarProdutoCotacao
+          cotacaoPropriaId={cotacaoPropriaId}
+          unidadeCotacao={unidadeCotacao}
+          produto={editando}
+          editar={editar}
+          onFechar={() => setEditando(null)}
+        />
+      )}
       <div className="painel-topo flex-wrap gap-y-3">
         <div className="flex flex-wrap items-end gap-3">
           <div>
@@ -232,6 +258,19 @@ export function ProdutosCotacaoPropria({ cotacaoPropriaId, produtos, ofertas, fo
                       <td>
                         <NomeProduto
                           p={p}
+                          edicao={
+                            editar ? (
+                              <button
+                                type="button"
+                                onClick={() => setEditando(p)}
+                                className="btn btn-fantasma btn-icone btn-sm ml-1 h-6 w-6 align-middle opacity-50 hover:opacity-100 focus-visible:opacity-100"
+                                title="Editar o produto"
+                                aria-label={`Editar ${p.nome}`}
+                              >
+                                <Pencil size={13} />
+                              </button>
+                            ) : undefined
+                          }
                           remocao={
                             p.incluido_a_mao && remover && r.qf === 0 ? (
                               <RemoverIncluido p={p} cotacaoPropriaId={cotacaoPropriaId} remover={remover} />

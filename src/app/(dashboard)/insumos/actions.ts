@@ -4,8 +4,89 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { mensagemErroBanco, type Falha } from '@/lib/acoes'
+import { chaveUnidade, nomeCurtoUnidade } from '@/lib/unidades-farmacia'
 
 const MSG_DUPLICADO = 'Já existe um insumo com este nome.'
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+// Troca, inclui ou tira (codigoNovo null) o código do insumo numa unidade da
+// farmácia. As linhas incluídas à mão deste insumo em cotações dessa unidade
+// ainda abertas passam a usar o código novo; as que vieram no PDF ficam como o
+// relatório trouxe.
+export async function alterarCodigoInsumo(
+  insumoId: string,
+  unidade: string,
+  codigoAntigo: string | null,
+  codigoNovo: string | null,
+): Promise<Falha | { linhas: number }> {
+  const chave = chaveUnidade(unidade)
+  const novo = codigoNovo?.trim() || null
+  if (!UUID.test(insumoId) || !chave || chave.length > 200) return { erro: 'Insumo ou unidade inválida.' }
+  if (novo && !/^\d{1,15}$/.test(novo)) return { erro: 'O código tem só números (até 15).' }
+  if (!novo && !codigoAntigo) return { erro: 'Informe o código.' }
+  if (novo && novo === codigoAntigo) return { linhas: 0 }
+
+  const supabase = await createClient()
+  const nomeUnidade = nomeCurtoUnidade(chave)
+
+  if (novo) {
+    const { data: dono, error } = await supabase
+      .from('insumo_codigos')
+      .select('insumo_id, insumos(nome_padrao)')
+      .eq('unidade', chave)
+      .eq('codigo', novo)
+      .maybeSingle()
+    if (error) return { erro: error.message }
+    if (dono && dono.insumo_id !== insumoId) {
+      const nome = (dono.insumos as { nome_padrao: string } | null)?.nome_padrao ?? 'outro insumo'
+      return { erro: `Na unidade ${nomeUnidade}, o código ${novo} já é de ${nome}. Tire de lá antes.` }
+    }
+  }
+
+  if (codigoAntigo) {
+    const { error } = await supabase
+      .from('insumo_codigos')
+      .delete()
+      .eq('unidade', chave)
+      .eq('codigo', codigoAntigo)
+      .eq('insumo_id', insumoId)
+    if (error) return { erro: error.message }
+  }
+  if (novo) {
+    const { error } = await supabase.from('insumo_codigos').upsert({ unidade: chave, codigo: novo, insumo_id: insumoId })
+    if (error) return { erro: error.message }
+  }
+
+  // Linhas incluídas à mão (horário diferente do da importação) deste insumo,
+  // em cotações da unidade sem mapa aprovado
+  let linhas = 0
+  if (novo) {
+    const { data: cotacoes } = await supabase
+      .from('cotacoes_proprias')
+      .select('id, unidade, created_at, mapas_cotacao(status)')
+    const abertas = (cotacoes ?? []).filter(
+      (c) =>
+        chaveUnidade(c.unidade) === chave &&
+        !(c.mapas_cotacao as { status: string }[] | null)?.some((m) => m.status === 'aprovado' || m.status === 'exportado'),
+    )
+    for (const c of abertas) {
+      const { data: alteradas, error } = await supabase
+        .from('cotacao_propria_itens')
+        .update({ codigo: novo })
+        .eq('cotacao_propria_id', c.id)
+        .eq('insumo_id', insumoId)
+        .neq('created_at', c.created_at)
+        .neq('codigo', novo)
+        .select('id')
+      if (error) return { erro: error.message }
+      linhas += alteradas?.length ?? 0
+    }
+  }
+
+  revalidatePath(`/insumos/${insumoId}`)
+  if (linhas) revalidatePath('/cotacoes-proprias', 'layout')
+  return { linhas }
+}
 
 function dadosDoForm(formData: FormData) {
   return {
