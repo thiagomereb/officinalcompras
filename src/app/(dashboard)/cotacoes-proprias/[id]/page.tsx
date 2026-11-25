@@ -261,6 +261,7 @@ export default async function CotacaoPropriaPage({
         incluir={
           <IncluirProduto
             cotacaoPropriaId={id}
+            unidadeCotacao={cotacao.unidade}
             incluir={incluirProdutoNaCotacao}
             bloqueio={fechada ? 'A cotação tem mapa aprovado: a lista de produtos não muda mais.' : null}
           />

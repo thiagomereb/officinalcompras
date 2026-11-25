@@ -8,6 +8,7 @@ import { mensagemErroBanco, type Falha } from '@/lib/acoes'
 import { incluidoAMao } from '@/lib/pedidos'
 import { chaveDescricao } from '@/lib/orcamento'
 import { ehUnidadeQuantidade, normalizarUnidade } from '@/lib/unidades'
+import { chaveUnidade, nomeCurtoUnidade } from '@/lib/unidades-farmacia'
 import type { ItemCotacaoPropria } from '@/lib/cotacao-propria'
 import type { Json } from '@/types/database'
 
@@ -95,33 +96,58 @@ async function temMapaFechado(supabase: Supabase, cotacaoPropriaId: string): Pro
   return !!count
 }
 
-// O insumo do produto incluído. O código do sistema da farmácia manda, como
-// na importação; sem insumo com esse código, vale o escolhido na busca (que
-// recebe o código depois de incluído: semCodigo) ou, fora do cadastro, um
-// insumo novo com o nome digitado
+// O insumo do produto incluído. O código da unidade da cotação manda, como na
+// importação (o mesmo número pode ser outro produto na outra unidade); sem
+// insumo com esse código nesta unidade, vale o escolhido na busca (que recebe o
+// código depois de incluído: semCodigo) ou, fora do cadastro, um insumo novo com
+// o nome digitado
 async function insumoDoProduto(
   supabase: Supabase,
-  { codigo, insumoId, nomeNovo, unidade }: { codigo: string; insumoId: string | null; nomeNovo: string | null; unidade: string },
+  {
+    codigo,
+    unidadeCotacao,
+    insumoId,
+    nomeNovo,
+    unidade,
+  }: { codigo: string; unidadeCotacao: string; insumoId: string | null; nomeNovo: string | null; unidade: string },
 ): Promise<{ id: string; nome: string; criado: boolean; semCodigo: boolean } | Falha> {
-  const { data: porCodigo, error } = await supabase.from('insumos').select('id, nome_padrao').eq('codigo', codigo).maybeSingle()
+  const unidadeNome = nomeCurtoUnidade(unidadeCotacao)
+  const { data: porCodigo, error } = await supabase
+    .from('insumo_codigos')
+    .select('insumos(id, nome_padrao)')
+    .eq('unidade', chaveUnidade(unidadeCotacao))
+    .eq('codigo', codigo)
+    .maybeSingle()
   if (error) return { erro: error.message }
-  if (porCodigo) {
-    if (insumoId && porCodigo.id !== insumoId) {
-      return { erro: `O código ${codigo} é de outro insumo do cadastro: ${porCodigo.nome_padrao}.` }
+  const doCodigo = porCodigo?.insumos as { id: string; nome_padrao: string } | null | undefined
+  if (doCodigo) {
+    if (insumoId && doCodigo.id !== insumoId) {
+      return { erro: `Na unidade ${unidadeNome}, o código ${codigo} é de outro insumo do cadastro: ${doCodigo.nome_padrao}.` }
     }
-    return { id: porCodigo.id, nome: porCodigo.nome_padrao, criado: false, semCodigo: false }
+    return { id: doCodigo.id, nome: doCodigo.nome_padrao, criado: false, semCodigo: false }
   }
 
   if (insumoId) {
-    const { data: escolhido } = await supabase.from('insumos').select('id, nome_padrao, codigo').eq('id', insumoId).maybeSingle()
+    const [{ data: escolhido }, { data: outroCodigo }] = await Promise.all([
+      supabase.from('insumos').select('id, nome_padrao').eq('id', insumoId).maybeSingle(),
+      supabase
+        .from('insumo_codigos')
+        .select('codigo')
+        .eq('insumo_id', insumoId)
+        .eq('unidade', chaveUnidade(unidadeCotacao))
+        .limit(1)
+        .maybeSingle(),
+    ])
     if (!escolhido) return { erro: 'Insumo não encontrado no cadastro.' }
-    if (escolhido.codigo) return { erro: `${escolhido.nome_padrao} tem o código ${escolhido.codigo} no cadastro, não ${codigo}.` }
+    if (outroCodigo) {
+      return { erro: `Na unidade ${unidadeNome}, ${escolhido.nome_padrao} tem o código ${outroCodigo.codigo}, não ${codigo}.` }
+    }
     return { id: escolhido.id, nome: escolhido.nome_padrao, criado: false, semCodigo: true }
   }
 
   const { data: criado, error: erroNovo } = await supabase
     .from('insumos')
-    .insert({ nome_padrao: nomeNovo!, unidade_padrao: unidade, codigo })
+    .insert({ nome_padrao: nomeNovo!, unidade_padrao: unidade })
     .select('id, nome_padrao')
     .single()
   if (erroNovo || !criado) {
@@ -131,7 +157,7 @@ async function insumoDoProduto(
         : 'Não foi possível criar o insumo.',
     }
   }
-  return { id: criado.id, nome: criado.nome_padrao, criado: true, semCodigo: false }
+  return { id: criado.id, nome: criado.nome_padrao, criado: true, semCodigo: true }
 }
 
 // Itens de orçamentos já lidos que ficaram sem produto pedido e cuja descrição
@@ -188,7 +214,7 @@ export async function incluirProdutoNaCotacao(payload: unknown): Promise<Falha |
 
   const supabase = await createClient()
   const [{ data: cotacao }, fechado, { data: mesmoCodigo }] = await Promise.all([
-    supabase.from('cotacoes_proprias').select('id').eq('id', cotacaoPropriaId).maybeSingle(),
+    supabase.from('cotacoes_proprias').select('id, unidade').eq('id', cotacaoPropriaId).maybeSingle(),
     temMapaFechado(supabase, cotacaoPropriaId),
     supabase
       .from('cotacao_propria_itens')
@@ -202,7 +228,8 @@ export async function incluirProdutoNaCotacao(payload: unknown): Promise<Falha |
   if (fechado) return { erro: MAPA_FECHADO }
   if (mesmoCodigo) return { erro: `O código ${codigo} já está nesta cotação: ${mesmoCodigo.nome}.` }
 
-  const insumo = await insumoDoProduto(supabase, { codigo, insumoId, nomeNovo, unidade })
+  const unidadeCotacao = cotacao.unidade ?? ''
+  const insumo = await insumoDoProduto(supabase, { codigo, unidadeCotacao, insumoId, nomeNovo, unidade })
   if ('erro' in insumo) return insumo
 
   const [{ data: mesmoInsumo }, { data: ultimo }] = await Promise.all([
@@ -242,10 +269,12 @@ export async function incluirProdutoNaCotacao(payload: unknown): Promise<Falha |
     return { erro: error ? mensagemErroBanco(error, { duplicado: `O código ${codigo} já está nesta cotação.` }) : 'Não foi possível incluir o produto.' }
   }
 
-  // O insumo escolhido na busca passa a ter o código, como na importação
+  // O insumo passa a ter o código nesta unidade, como na importação
   if (insumo.semCodigo) {
-    const { error: erroCodigo } = await supabase.from('insumos').update({ codigo }).eq('id', insumo.id).is('codigo', null)
-    if (erroCodigo) console.warn(`[cotacao-propria] não foi possível gravar o código ${codigo} no insumo: ${erroCodigo.message}`)
+    const { error: erroCodigo } = await supabase
+      .from('insumo_codigos')
+      .insert({ unidade: chaveUnidade(unidadeCotacao), codigo, insumo_id: insumo.id })
+    if (erroCodigo) console.warn(`[cotacao-propria] não foi possível gravar o código ${codigo} do insumo: ${erroCodigo.message}`)
   }
 
   const ofertas = await ligarOfertasPorSinonimo(supabase, cotacaoPropriaId, item.id, insumo.id)

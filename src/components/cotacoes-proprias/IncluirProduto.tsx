@@ -8,12 +8,15 @@ import { createClient } from '@/lib/supabase/client'
 import type { InsumoOpcao } from '@/lib/supabase/busca-insumos'
 import { UNIDADES_QUANTIDADE, ehUnidadeQuantidade, normalizarUnidade, type UnidadeQuantidade } from '@/lib/unidades'
 import { numeroDigitado } from '@/lib/numero'
+import { chaveUnidade, nomeCurtoUnidade } from '@/lib/unidades-farmacia'
 import type { Falha } from '@/lib/acoes'
 
 type Incluido = { codigo: string; nome: string; ofertas: number }
 
 interface Props {
   cotacaoPropriaId: string
+  // A unidade da farmácia da cotação: o código do produto é o desta unidade
+  unidadeCotacao: string | null
   incluir: (payload: unknown) => Promise<Falha | Incluido>
   // Por que não dá para incluir (mapa aprovado); null libera
   bloqueio: string | null
@@ -23,7 +26,7 @@ const numeroBR = numeroDigitado
 
 // Produto que faltou na cotação gerada pelo sistema da farmácia. O modal fica
 // aberto depois de incluir, para emendar o próximo
-export function IncluirProduto({ cotacaoPropriaId, incluir, bloqueio }: Props) {
+export function IncluirProduto({ cotacaoPropriaId, unidadeCotacao, incluir, bloqueio }: Props) {
   const idForm = useId()
   const [aberto, setAberto] = useState(false)
   const [foraDoCadastro, setForaDoCadastro] = useState(false)
@@ -59,16 +62,22 @@ export function IncluirProduto({ cotacaoPropriaId, incluir, bloqueio }: Props) {
   async function escolher(i: InsumoOpcao) {
     setInsumo(i)
     setErro(null)
-    let { codigo: doCadastro, unidade_padrao } = i
-    // A busca por semelhança não traz o código
-    if (doCadastro == null) {
-      const { data } = await createClient().from('insumos').select('codigo, unidade_padrao').eq('id', i.id).maybeSingle()
-      doCadastro = data?.codigo ?? null
-      unidade_padrao = data?.unidade_padrao ?? unidade_padrao
+    const chave = chaveUnidade(unidadeCotacao)
+    let doCadastro = i.codigos.find((c) => c.unidade === chave)?.codigo ?? null
+    let unidadePadrao = i.unidade_padrao
+    // A busca por semelhança não traz o código nem a unidade
+    if (!i.codigos.length) {
+      const supabase = createClient()
+      const [{ data: cod }, { data: ins }] = await Promise.all([
+        supabase.from('insumo_codigos').select('codigo').eq('insumo_id', i.id).eq('unidade', chave).maybeSingle(),
+        supabase.from('insumos').select('unidade_padrao').eq('id', i.id).maybeSingle(),
+      ])
+      doCadastro = cod?.codigo ?? null
+      unidadePadrao = ins?.unidade_padrao ?? unidadePadrao
     }
     setCodigo(doCadastro ?? '')
     setCodigoDoCadastro(!!doCadastro)
-    const u = normalizarUnidade(unidade_padrao)
+    const u = normalizarUnidade(unidadePadrao)
     if (ehUnidadeQuantidade(u)) setUnidade(u)
   }
 
@@ -216,7 +225,7 @@ export function IncluirProduto({ cotacaoPropriaId, incluir, bloqueio }: Props) {
           <div className="grid grid-cols-[1fr_110px] gap-3">
             <div>
               <label htmlFor={`${idForm}-codigo`} className="legenda">
-                Código no sistema da farmácia <span className="obrigatorio">*</span>
+                Código na unidade {nomeCurtoUnidade(unidadeCotacao)} <span className="obrigatorio">*</span>
               </label>
               <input
                 id={`${idForm}-codigo`}
@@ -227,7 +236,7 @@ export function IncluirProduto({ cotacaoPropriaId, incluir, bloqueio }: Props) {
                 maxLength={15}
                 className={`campo leitura ${codigoDoCadastro ? 'bg-nevoa' : ''}`}
               />
-              {codigoDoCadastro && <p className="mt-1 text-[12px] text-ardosia">Do cadastro de insumos.</p>}
+              {codigoDoCadastro && <p className="mt-1 text-[12px] text-ardosia">O código deste insumo nesta unidade.</p>}
             </div>
             <div>
               <label htmlFor={`${idForm}-teor`} className="legenda">

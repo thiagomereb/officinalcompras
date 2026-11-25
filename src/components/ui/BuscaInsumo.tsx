@@ -3,6 +3,7 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import { Check, Search } from 'lucide-react'
 import { buscarInsumos, type InsumoOpcao } from '@/lib/supabase/busca-insumos'
+import { nomeCurtoUnidade } from '@/lib/unidades-farmacia'
 
 interface Props {
   // Com name, o id escolhido vai num input oculto (para formulários)
@@ -218,10 +219,16 @@ export function BuscaInsumo({
                 onMouseEnter={() => setAtivo(i)}
                 className={`cursor-pointer px-3 py-2 ${i === ativo ? 'bg-nevoa' : ''}`}
               >
-                <span className="block text-[13.5px] leading-snug">
-                  {o.codigo && <span className="leitura mr-2 text-[12px] text-ardosia">{o.codigo}</span>}
-                  {o.nome_padrao}
-                </span>
+                <span className="block text-[13.5px] leading-snug">{o.nome_padrao}</span>
+                {o.codigos.length > 0 && (
+                  <span className="mt-0.5 block text-[11.5px] text-ardosia">
+                    {o.codigos.map((c) => (
+                      <span key={c.unidade} className="mr-3 inline-block">
+                        <span className="leitura">{c.codigo}</span> {nomeCurtoUnidade(c.unidade)}
+                      </span>
+                    ))}
+                  </span>
+                )}
                 {o.via_sinonimo && (
                   <span className="mt-0.5 block text-[11.5px] text-ardosia">sinônimo: {o.via_sinonimo}</span>
                 )}
