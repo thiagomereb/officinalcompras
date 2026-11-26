@@ -15,6 +15,8 @@ export type ItemOrcamento = {
   id: string
   descricao: string
   preco_unitario: number
+  // Combinado com o fornecedor no mapa; vale no lugar do preço do orçamento
+  preco_negociado: number | null
   quantidade_minima: number | null
   quantidade: number | null
   unidade: string | null
@@ -161,7 +163,7 @@ export function ItensOrcamento({ itens, pedidos, orcamentoId, cotacaoPropriaId, 
             </thead>
             <tbody>
               {visiveis.map((i) => {
-                const base = precoPorUnidadeBase(i.preco_unitario, i.quantidade_minima, i.unidade)
+                const base = precoPorUnidadeBase(i.preco_negociado ?? i.preco_unitario, i.quantidade_minima, i.unidade)
                 const emEdicao = editando === i.id
                 return (
                   <tr key={i.id} className="group/linha align-top">
@@ -228,7 +230,18 @@ export function ItensOrcamento({ itens, pedidos, orcamentoId, cotacaoPropriaId, 
                       {i.quantidade_minima != null ? `${i.quantidade_minima.toLocaleString('pt-BR')} ` : ''}
                       {i.unidade ?? ''}
                     </td>
-                    <td className="num leitura">{moeda(i.preco_unitario)}</td>
+                    <td className="num">
+                      {i.preco_negociado != null ? (
+                        <>
+                          <span className="leitura font-medium text-salvia">{moeda(i.preco_negociado)}</span>
+                          <div className="text-[11px] text-ardosia" title="Preço combinado com o fornecedor no mapa de cotação">
+                            negociado · orç. <span className="leitura line-through">{moeda(i.preco_unitario)}</span>
+                          </div>
+                        </>
+                      ) : (
+                        <span className="leitura">{moeda(i.preco_unitario)}</span>
+                      )}
+                    </td>
                     <td className="num">
                       <LeituraPreco valor={base.valor} base={base.base} />
                     </td>

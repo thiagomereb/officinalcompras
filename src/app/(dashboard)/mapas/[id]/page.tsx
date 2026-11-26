@@ -6,7 +6,7 @@ import { carregarGruposMapa, carregarUltimasCompras, orcamentosDoMapa, quantidad
 import { ehComparacaoCongelada } from '@/lib/compras'
 import { emLotes } from '@/lib/supabase/consultas'
 import { ComparacaoTable, type EscolhaSalva } from '@/components/mapas/ComparacaoTable'
-import { salvarSelecoes, aprovarMapa, cancelarMapa, excluirMapa } from '../actions'
+import { salvarSelecoes, aprovarMapa, cancelarMapa, excluirMapa, negociarPreco } from '../actions'
 import { ExcluirMapaButton } from './ExcluirMapaButton'
 import { CancelarMapaButton } from './CancelarMapaButton'
 import { Cabecalho } from '@/components/ui/Cabecalho'
@@ -179,6 +179,7 @@ export default async function MapaPage({ params }: { params: Promise<{ id: strin
           duplicatasInfo={detectarDuplicatas(grupos, sinonimos)}
           onSalvar={salvarSelecoes}
           onAprovar={aprovarMapa}
+          onNegociar={negociarPreco}
         />
       )}
     </div>

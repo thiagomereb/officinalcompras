@@ -121,6 +121,49 @@ export async function salvarSelecoes(mapaId: string, escolhas: unknown): Promise
   revalidatePath(`/mapas/${mapaId}`)
 }
 
+// O comprador negociou com o fornecedor: o preço combinado da embalagem passa a
+// valer no mapa (e na aprovação e na ordem de compra) no lugar do preço do
+// orçamento, que continua guardado. null volta ao preço do orçamento. Só em
+// rascunho: mapa aprovado é o registro da compra.
+export async function negociarPreco(mapaId: string, cotacaoItemId: string, preco: number | null): Promise<Falha | void> {
+  const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+  if (!UUID.test(mapaId) || !UUID.test(cotacaoItemId)) return { erro: 'Oferta inválida.' }
+  if (preco != null && !(Number.isFinite(preco) && preco > 0 && preco < 1e9)) return { erro: 'Informe um preço maior que zero.' }
+
+  const supabase = await createClient()
+  const { data: mapa } = await supabase
+    .from('mapas_cotacao')
+    .select('status, cotacoes_ids, cotacao_propria_id')
+    .eq('id', mapaId)
+    .single()
+  if (!mapa) return { erro: 'Mapa não encontrado.' }
+  if (mapa.status !== 'rascunho') return { erro: MSG_APROVADO }
+
+  const { data: item } = await supabase
+    .from('cotacao_itens')
+    .select('cotacao_id, preco_unitario')
+    .eq('id', cotacaoItemId)
+    .maybeSingle()
+  const orcamentos = await orcamentosDoMapa(supabase, mapa)
+  if (!item || !orcamentos.includes(item.cotacao_id)) return { erro: 'Esta oferta não é de um orçamento deste mapa.' }
+
+  // Igual ao do orçamento é o mesmo que não ter negociado
+  const negociado = preco != null && Math.round(preco * 10000) !== Math.round(item.preco_unitario * 10000) ? Math.round(preco * 10000) / 10000 : null
+  const { data: claims } = await supabase.auth.getClaims()
+  const { error } = await supabase
+    .from('cotacao_itens')
+    .update({
+      preco_negociado: negociado,
+      negociado_em: negociado != null ? new Date().toISOString() : null,
+      negociado_por: negociado != null ? ((claims?.claims?.email as string | undefined) ?? null) : null,
+    })
+    .eq('id', cotacaoItemId)
+  if (error) return { erro: error.message }
+
+  revalidatePath(`/mapas/${mapaId}`)
+  if (mapa.cotacao_propria_id) revalidatePath(`/cotacoes-proprias/${mapa.cotacao_propria_id}`, 'layout')
+}
+
 // Aprovar grava as escolhas da tela e congela a decisão numa transação só
 // (função aprovar_mapa): a cópia de cada oferta, a comparação inteira, o valor,
 // quem aprovou e quando. Daí em diante o mapa só pode ser cancelado.

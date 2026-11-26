@@ -69,7 +69,10 @@ export type Database = {
           insumo_id: string | null
           ipi: number | null
           lote: string | null
+          negociado_em: string | null
+          negociado_por: string | null
           pais_origem: string | null
+          preco_negociado: number | null
           preco_unitario: number
           quantidade: number | null
           quantidade_minima: number | null
@@ -88,7 +91,10 @@ export type Database = {
           insumo_id?: string | null
           ipi?: number | null
           lote?: string | null
+          negociado_em?: string | null
+          negociado_por?: string | null
           pais_origem?: string | null
+          preco_negociado?: number | null
           preco_unitario: number
           quantidade?: number | null
           quantidade_minima?: number | null
@@ -107,7 +113,10 @@ export type Database = {
           insumo_id?: string | null
           ipi?: number | null
           lote?: string | null
+          negociado_em?: string | null
+          negociado_por?: string | null
           pais_origem?: string | null
+          preco_negociado?: number | null
           preco_unitario?: number
           quantidade?: number | null
           quantidade_minima?: number | null

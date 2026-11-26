@@ -32,6 +32,21 @@ describe('compararOfertas', () => {
     expect(kg.unidade_base).toBe('g')
   })
 
+  it('o preço negociado é o que conta na comparação; o do orçamento fica guardado', () => {
+    // B era mais cara (R$0,15/g) e foi negociada para R$8 o pacote de 100 g (R$0,08/g)
+    const grupos = agruparPorInsumo(
+      compararOfertas([
+        oferta({ cotacao_item_id: 'a', insumo_id: 'x', preco_unitario: 10, quantidade_minima: 100 }),
+        oferta({ cotacao_item_id: 'b', insumo_id: 'x', preco_unitario: 8, preco_original: 15, quantidade_minima: 100 }),
+      ]),
+    )
+    const [primeiro, segundo] = grupos[0].candidatos
+    expect(primeiro.cotacao_item_id).toBe('b')
+    expect(primeiro.preco_base).toBeCloseTo(0.08)
+    expect(primeiro.preco_original).toBe(15)
+    expect(segundo.preco_original).toBeUndefined()
+  })
+
   it('marca como não comparável a oferta de outra grandeza', () => {
     const ofertas = compararOfertas([
       oferta({ cotacao_item_id: 'a', insumo_id: 'x', unidade: 'g' }),

@@ -2,9 +2,10 @@
 
 import { useState, useTransition } from 'react'
 import Link from 'next/link'
-import { Check, Save, FileDown, ShoppingCart, Wand2 } from 'lucide-react'
+import { Check, Save, FileDown, Pencil, ShoppingCart, Wand2, X } from 'lucide-react'
 import type { CandidatoItem, GrupoInsumo } from '@/lib/comparacao'
-import type { salvarSelecoes, aprovarMapa } from '@/app/(dashboard)/mapas/actions'
+import type { salvarSelecoes, aprovarMapa, negociarPreco } from '@/app/(dashboard)/mapas/actions'
+import { numeroDigitado } from '@/lib/numero'
 import { sugestaoDoGrupo, valorEstimado } from '@/lib/compras'
 import type { QuantidadePedida, UltimaCompra } from '@/lib/mapas'
 import { UNIDADES_QUANTIDADE, ehUnidadeQuantidade, type UnidadeQuantidade } from '@/lib/unidades'
@@ -32,6 +33,126 @@ interface Props {
   duplicatasInfo?: Record<string, InfoDuplicata>
   onSalvar?: typeof salvarSelecoes
   onAprovar?: typeof aprovarMapa
+  // Grava o preço que o comprador negociou com o fornecedor (só em rascunho)
+  onNegociar?: typeof negociarPreco
+}
+
+// O preço de uma oferta: o negociado, com o do orçamento embaixo; no rascunho,
+// o lápis abre o campo para digitar o preço combinado com o fornecedor
+function PrecoOferta({
+  c,
+  mapaId,
+  onNegociar,
+}: {
+  c: CandidatoItem
+  mapaId: string
+  onNegociar?: typeof negociarPreco
+}) {
+  const [editando, setEditando] = useState(false)
+  const [valor, setValor] = useState('')
+  const [erro, setErro] = useState<string | null>(null)
+  const [pending, startTransition] = useTransition()
+  const negociado = c.preco_original != null
+
+  function abrir() {
+    setValor(String(c.preco_unitario).replace('.', ','))
+    setErro(null)
+    setEditando(true)
+  }
+
+  function gravar(preco: number | null) {
+    if (!onNegociar) return
+    if (preco != null && !(preco > 0)) {
+      setErro('Preço inválido')
+      return
+    }
+    startTransition(async () => {
+      const r = await onNegociar(mapaId, c.cotacao_item_id, preco)
+      if (r?.erro) {
+        setErro(r.erro)
+        return
+      }
+      // O mapa recarrega com o preço novo (revalidatePath na action)
+      setEditando(false)
+    })
+  }
+
+  if (editando) {
+    return (
+      // Clique aqui não escolhe a oferta
+      <div className="flex flex-col items-end gap-1" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center gap-1">
+          <span className="text-[11px] text-ardosia">R$</span>
+          <input
+            value={valor}
+            onChange={(e) => setValor(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') gravar(numeroDigitado(valor))
+              if (e.key === 'Escape') setEditando(false)
+            }}
+            inputMode="decimal"
+            autoFocus
+            disabled={pending}
+            aria-label={`Preço negociado com ${c.fornecedor_nome}`}
+            className="campo campo-sm leitura w-24 text-right"
+          />
+          <button
+            type="button"
+            onClick={() => gravar(numeroDigitado(valor))}
+            disabled={pending}
+            className="btn btn-primario btn-icone btn-sm h-7 w-7"
+            title="Gravar o preço negociado"
+            aria-label="Gravar o preço negociado"
+          >
+            {pending ? <span className="girador" aria-hidden="true" /> : <Check size={13} />}
+          </button>
+          <button
+            type="button"
+            onClick={() => setEditando(false)}
+            disabled={pending}
+            className="btn btn-fantasma btn-icone btn-sm h-7 w-7"
+            title="Cancelar"
+            aria-label="Cancelar"
+          >
+            <X size={13} />
+          </button>
+        </div>
+        {negociado && (
+          <button type="button" onClick={() => gravar(null)} disabled={pending} className="text-[11px] text-ardosia hover:underline">
+            Voltar ao do orçamento ({moeda(c.preco_original!)})
+          </button>
+        )}
+        {erro && <span className="text-[11px] text-oxido">{erro}</span>}
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex items-start justify-end gap-1">
+      <div>
+        <span className={`leitura ${negociado ? 'font-medium text-salvia' : ''}`}>{moeda(c.preco_unitario)}</span>
+        {negociado && (
+          <div className="text-[11px] text-ardosia" title="Preço do orçamento do fornecedor, antes da negociação">
+            negociado · orç. <span className="leitura line-through">{moeda(c.preco_original!)}</span>
+          </div>
+        )}
+      </div>
+      {onNegociar && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation()
+            abrir()
+          }}
+          className="btn btn-fantasma btn-icone btn-sm h-6 w-6 opacity-40 hover:opacity-100 focus-visible:opacity-100"
+          title="Negociar o preço com o fornecedor"
+          aria-label={`Negociar o preço de ${c.fornecedor_nome}`}
+        >
+          <Pencil size={12} />
+        </button>
+      )}
+    </div>
+  )
 }
 
 const moeda = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
@@ -56,6 +177,7 @@ export function ComparacaoTable({
   duplicatasInfo,
   onSalvar,
   onAprovar,
+  onNegociar,
 }: Props) {
   const salvas = Object.entries(escolhasSalvas)
   const [escolhas, setEscolhas] = useState<Record<string, string>>(() =>
@@ -236,7 +358,8 @@ export function ComparacaoTable({
       {!congelado && (
         <p className="text-[12.5px] text-ardosia">
           A <span className="font-medium text-grafite">sugestão</span> é a oferta de menor preço por unidade base. Prazos e
-          frete ficam ao lado para você pesar. A escolha é sua: clique na oferta que vai comprar.
+          frete ficam ao lado para você pesar. A escolha é sua: clique na oferta que vai comprar. Negociou com o
+          fornecedor? O lápis no preço grava o valor combinado, que passa a valer no mapa e na ordem de compra.
         </p>
       )}
 
@@ -322,7 +445,9 @@ export function ComparacaoTable({
                           <span className={isEscolhido ? 'font-medium' : ''}>{c.fornecedor_nome}</span>
                           {isSugestao && <span className="selo ml-2 h-5 px-1.5 text-[11px]">sugestão</span>}
                         </td>
-                        <td className="num leitura">{moeda(c.preco_unitario)}</td>
+                        <td className="num">
+                          <PrecoOferta c={c} mapaId={mapaId} onNegociar={congelado ? undefined : onNegociar} />
+                        </td>
                         <td className="text-ardosia">
                           {c.quantidade_minima ? `${c.quantidade_minima} ` : ''}
                           {c.unidade ?? '—'}

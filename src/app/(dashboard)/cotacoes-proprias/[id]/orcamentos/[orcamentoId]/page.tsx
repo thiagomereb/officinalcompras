@@ -40,7 +40,7 @@ export default async function OrcamentoPage({ params }: { params: Promise<{ id: 
     buscarTodos((de, ate) =>
       supabase
         .from('cotacao_itens')
-        .select('id, descricao_original, preco_unitario, quantidade_minima, quantidade, unidade, validade, pais_origem, ipi, st, vinculo_origem, vinculo_obs, cotacao_propria_item_id, created_at')
+        .select('id, descricao_original, preco_unitario, preco_negociado, quantidade_minima, quantidade, unidade, validade, pais_origem, ipi, st, vinculo_origem, vinculo_obs, cotacao_propria_item_id, created_at')
         .eq('cotacao_id', orcamentoId)
         .order('created_at')
         .order('id')
@@ -59,6 +59,7 @@ export default async function OrcamentoPage({ params }: { params: Promise<{ id: 
     id: i.id,
     descricao: i.descricao_original,
     preco_unitario: i.preco_unitario,
+    preco_negociado: i.preco_negociado,
     quantidade_minima: i.quantidade_minima,
     quantidade: i.quantidade,
     unidade: i.unidade,

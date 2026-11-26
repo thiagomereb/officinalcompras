@@ -60,7 +60,7 @@ export default async function DashboardPage() {
       supabase
         .from('cotacao_itens')
         .select(
-          `id, cotacao_id, insumo_id, preco_unitario, unidade, quantidade_minima, lote, validade,
+          `id, cotacao_id, insumo_id, preco_unitario, preco_negociado, unidade, quantidade_minima, lote, validade,
            cotacoes(id, prazo_entrega_dias, prazo_pagamento_dias, frete_fixo, frete_gratis_acima, pedido_minimo, data_cotacao, validade_cotacao, fornecedores(razao_social, nome_fantasia)),
            insumos(nome_padrao)`,
         )
@@ -101,7 +101,7 @@ export default async function DashboardPage() {
       insumo_id: item.insumo_id!,
       insumo_nome: insumo?.nome_padrao ?? '—',
       fornecedor_nome: forn?.nome_fantasia ?? forn?.razao_social ?? '—',
-      preco_unitario: item.preco_unitario,
+      preco_unitario: item.preco_negociado ?? item.preco_unitario,
       unidade: item.unidade,
       quantidade_minima: item.quantidade_minima,
       lote: item.lote,

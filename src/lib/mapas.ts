@@ -69,7 +69,7 @@ export async function carregarGruposMapa(
     buscarTodos((de, ate) =>
       supabase
         .from('cotacao_itens')
-        .select('id, cotacao_id, insumo_id, preco_unitario, unidade, quantidade_minima, lote, validade, insumos(nome_padrao)')
+        .select('id, cotacao_id, insumo_id, preco_unitario, preco_negociado, unidade, quantidade_minima, lote, validade, insumos(nome_padrao)')
         .in('cotacao_id', cotacoesIds)
         .not('insumo_id', 'is', null)
         .order('id')
@@ -96,7 +96,9 @@ export async function carregarGruposMapa(
         insumo_id: item.insumo_id!,
         insumo_nome: insumo?.nome_padrao ?? 'Desconhecido',
         fornecedor_nome: cond?.fornecedor_nome ?? '—',
-        preco_unitario: item.preco_unitario,
+        // O negociado pelo comprador vale no lugar do preço do orçamento
+        preco_unitario: item.preco_negociado ?? item.preco_unitario,
+        preco_original: item.preco_negociado != null ? item.preco_unitario : null,
         unidade: item.unidade,
         quantidade_minima: item.quantidade_minima,
         lote: item.lote,

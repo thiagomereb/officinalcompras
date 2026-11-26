@@ -6,7 +6,10 @@ export type CandidatoItem = {
   insumo_id: string
   insumo_nome: string
   fornecedor_nome: string
+  // Preço da embalagem que vale: o negociado pelo comprador, se houver, ou o do orçamento
   preco_unitario: number
+  // O preço do orçamento, quando o comprador negociou outro
+  preco_original?: number | null
   unidade: string | null
   quantidade_minima: number | null
   lote: string | null

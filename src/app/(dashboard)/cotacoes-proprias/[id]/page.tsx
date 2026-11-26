@@ -72,7 +72,7 @@ export default async function CotacaoPropriaPage({
     ? await buscarTodos((de, ate) =>
         supabase
           .from('cotacao_itens')
-          .select('id, cotacao_id, cotacao_propria_item_id, preco_unitario, quantidade_minima, quantidade, unidade, validade, vinculo_origem')
+          .select('id, cotacao_id, cotacao_propria_item_id, preco_unitario, preco_negociado, quantidade_minima, quantidade, unidade, validade, vinculo_origem')
           .in('cotacao_id', [...orcamentoPorId.keys()])
           .not('cotacao_propria_item_id', 'is', null)
           .order('id')
@@ -87,7 +87,8 @@ export default async function CotacaoPropriaPage({
       orcamentoId: i.cotacao_id,
       fornecedorId: o.fornecedor_id,
       fornecedor: nomeFornecedor(o.fornecedores),
-      precoEmbalagem: i.preco_unitario,
+      // O negociado pelo comprador no mapa vale no lugar do preço do orçamento
+      precoEmbalagem: i.preco_negociado ?? i.preco_unitario,
       embalagem: i.quantidade_minima,
       unidade: i.unidade,
       embalagens: i.quantidade,
