@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { carregarGruposMapa, orcamentosDoMapa } from '@/lib/mapas'
+import { gravarPrecoNegociado } from '@/lib/negociacao'
 import { montarAprovacao, type Escolha } from '@/lib/compras'
 import { ehUnidadeQuantidade } from '@/lib/unidades'
 import type { Falha } from '@/lib/acoes'
@@ -147,18 +148,8 @@ export async function negociarPreco(mapaId: string, cotacaoItemId: string, preco
   const orcamentos = await orcamentosDoMapa(supabase, mapa)
   if (!item || !orcamentos.includes(item.cotacao_id)) return { erro: 'Esta oferta não é de um orçamento deste mapa.' }
 
-  // Igual ao do orçamento é o mesmo que não ter negociado
-  const negociado = preco != null && Math.round(preco * 10000) !== Math.round(item.preco_unitario * 10000) ? Math.round(preco * 10000) / 10000 : null
-  const { data: claims } = await supabase.auth.getClaims()
-  const { error } = await supabase
-    .from('cotacao_itens')
-    .update({
-      preco_negociado: negociado,
-      negociado_em: negociado != null ? new Date().toISOString() : null,
-      negociado_por: negociado != null ? ((claims?.claims?.email as string | undefined) ?? null) : null,
-    })
-    .eq('id', cotacaoItemId)
-  if (error) return { erro: error.message }
+  const gravado = await gravarPrecoNegociado(supabase, cotacaoItemId, item.preco_unitario, preco)
+  if (gravado) return gravado
 
   revalidatePath(`/mapas/${mapaId}`)
   if (mapa.cotacao_propria_id) revalidatePath(`/cotacoes-proprias/${mapa.cotacao_propria_id}`, 'layout')

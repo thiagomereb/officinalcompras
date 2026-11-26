@@ -10,6 +10,7 @@ import type { FornecedorCadastro } from '@/lib/reconhecer-fornecedor'
 import type { ProdutoPedidoOpcao } from '@/lib/busca-pedidos'
 import { chaveDescricao, itemParaGravar, itemValido, soDigitos } from '@/lib/orcamento'
 import { ehUnidadeEmbalagem, normalizarUnidade } from '@/lib/unidades'
+import { gravarPrecoNegociado } from '@/lib/negociacao'
 import type { Falha } from '@/lib/acoes'
 import type { Json } from '@/types/database'
 
@@ -295,6 +296,38 @@ async function desfazerEscolhasEmRascunho(
   if (!rascunho.length) return
   const { error: erroExclusao } = await supabase.from('mapa_cotacao_itens').delete().in('id', rascunho)
   if (erroExclusao) return { erro: erroExclusao.message }
+  revalidatePath('/mapas', 'layout')
+}
+
+// O comprador negociou com o fornecedor: o preço combinado da embalagem vale no
+// mapa e na ordem de compra no lugar do preço do orçamento, que fica guardado.
+// null volta ao preço do orçamento. Com o mapa da cotação aprovado, não muda mais.
+export async function negociarPrecoOrcamento(
+  itemId: string,
+  orcamentoId: string,
+  cotacaoPropriaId: string,
+  preco: number | null,
+): Promise<Falha | void> {
+  if (![itemId, orcamentoId, cotacaoPropriaId].every((id) => UUID.test(id))) return { erro: 'Item inválido.' }
+  const supabase = await createClient()
+
+  const [{ data: item }, { data: orcamento }, { count: mapasFechados }] = await Promise.all([
+    supabase.from('cotacao_itens').select('preco_unitario').eq('id', itemId).eq('cotacao_id', orcamentoId).maybeSingle(),
+    supabase.from('cotacoes').select('id').eq('id', orcamentoId).eq('cotacao_propria_id', cotacaoPropriaId).maybeSingle(),
+    supabase
+      .from('mapas_cotacao')
+      .select('id', { count: 'exact', head: true })
+      .eq('cotacao_propria_id', cotacaoPropriaId)
+      .in('status', ['aprovado', 'exportado']),
+  ])
+  if (!item || !orcamento) return { erro: 'Item não encontrado neste orçamento.' }
+  if (mapasFechados) return { erro: 'O mapa desta cotação já foi aprovado: o preço da compra não muda mais.' }
+
+  const gravado = await gravarPrecoNegociado(supabase, itemId, item.preco_unitario, preco)
+  if (gravado) return gravado
+
+  revalidatePath(caminho(cotacaoPropriaId, orcamentoId))
+  revalidatePath(caminho(cotacaoPropriaId))
   revalidatePath('/mapas', 'layout')
 }
 

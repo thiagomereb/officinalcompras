@@ -14,6 +14,7 @@ import {
   confirmarSugestoes,
   excluirOrcamento,
   incluirItemNoOrcamento,
+  negociarPrecoOrcamento,
   removerItemIncluido,
 } from '../../../orcamentos-actions'
 import { ExcluirOrcamentoButton } from './ExcluirOrcamentoButton'
@@ -36,7 +37,7 @@ export default async function OrcamentoPage({ params }: { params: Promise<{ id: 
   ])
   if (!orcamento || !cotacao) notFound()
 
-  const [itensRaw, pedidos, { data: fornecedores }, arquivoUrl] = await Promise.all([
+  const [itensRaw, pedidos, { data: fornecedores }, arquivoUrl, { count: mapasFechados }] = await Promise.all([
     buscarTodos((de, ate) =>
       supabase
         .from('cotacao_itens')
@@ -49,6 +50,12 @@ export default async function OrcamentoPage({ params }: { params: Promise<{ id: 
     carregarPedidosComSinonimos(supabase, id),
     supabase.from('fornecedores').select('*').order('razao_social'),
     getArquivoSignedUrl(supabase, orcamento.arquivo_url),
+    // Mapa aprovado é o registro da compra: o preço não se negocia mais
+    supabase
+      .from('mapas_cotacao')
+      .select('id', { count: 'exact', head: true })
+      .eq('cotacao_propria_id', id)
+      .in('status', ['aprovado', 'exportado']),
   ])
 
   const pedidoPorId = new Map(pedidos.map((p) => [p.id, p]))
@@ -156,6 +163,7 @@ export default async function OrcamentoPage({ params }: { params: Promise<{ id: 
         alterar={alterarVinculoOrcamento}
         confirmar={confirmarSugestoes}
         remover={removerItemIncluido}
+        negociar={mapasFechados ? undefined : negociarPrecoOrcamento}
         incluir={
           <IncluirItemOrcamento
             orcamentoId={orcamentoId}

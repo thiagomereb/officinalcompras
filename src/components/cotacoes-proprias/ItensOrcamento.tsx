@@ -7,8 +7,10 @@ import { LeituraPreco } from '@/components/ui/LeituraPreco'
 import type {
   alterarVinculoOrcamento,
   confirmarSugestoes,
+  negociarPrecoOrcamento,
   removerItemIncluido,
 } from '@/app/(dashboard)/cotacoes-proprias/orcamentos-actions'
+import { PrecoNegociavel } from '@/components/ui/PrecoNegociavel'
 import { QuantidadePedida, SeletorProdutoPedido, type ProdutoPedidoOpcao } from './SeletorProdutoPedido'
 
 export type ItemOrcamento = {
@@ -38,16 +40,27 @@ interface Props {
   alterar: typeof alterarVinculoOrcamento
   confirmar: typeof confirmarSugestoes
   remover: typeof removerItemIncluido
+  // Grava o preço negociado com o fornecedor; ausente com o mapa aprovado
+  negociar?: typeof negociarPrecoOrcamento
   // Botão de incluir item, no topo da lista
   incluir?: React.ReactNode
 }
 
 type Filtro = 'todos' | 'conferir' | 'fora'
 
-const moeda = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 const data = (d: string) => new Date(d + 'T12:00:00').toLocaleDateString('pt-BR')
 
-export function ItensOrcamento({ itens, pedidos, orcamentoId, cotacaoPropriaId, alterar, confirmar, remover, incluir }: Props) {
+export function ItensOrcamento({
+  itens,
+  pedidos,
+  orcamentoId,
+  cotacaoPropriaId,
+  alterar,
+  confirmar,
+  remover,
+  negociar,
+  incluir,
+}: Props) {
   const [filtro, setFiltro] = useState<Filtro>(() => (itens.some((i) => i.origem === 'ia') ? 'conferir' : 'todos'))
   const [busca, setBusca] = useState('')
   const [editando, setEditando] = useState<string | null>(null)
@@ -231,16 +244,12 @@ export function ItensOrcamento({ itens, pedidos, orcamentoId, cotacaoPropriaId, 
                       {i.unidade ?? ''}
                     </td>
                     <td className="num">
-                      {i.preco_negociado != null ? (
-                        <>
-                          <span className="leitura font-medium text-salvia">{moeda(i.preco_negociado)}</span>
-                          <div className="text-[11px] text-ardosia" title="Preço combinado com o fornecedor no mapa de cotação">
-                            negociado · orç. <span className="leitura line-through">{moeda(i.preco_unitario)}</span>
-                          </div>
-                        </>
-                      ) : (
-                        <span className="leitura">{moeda(i.preco_unitario)}</span>
-                      )}
+                      <PrecoNegociavel
+                        precoOrcamento={i.preco_unitario}
+                        precoNegociado={i.preco_negociado}
+                        rotulo={i.descricao}
+                        gravar={negociar ? (preco) => negociar(i.id, orcamentoId, cotacaoPropriaId, preco) : undefined}
+                      />
                     </td>
                     <td className="num">
                       <LeituraPreco valor={base.valor} base={base.base} />
