@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import Link, { useLinkStatus } from 'next/link'
 import { usePathname } from 'next/navigation'
+import { nomeUnidade, type UnidadeFarmacia } from '@/lib/unidades-farmacia'
 import {
   LayoutDashboard,
   ClipboardList,
@@ -49,7 +50,7 @@ const grupos: { label: string; itens: ItemNav[] }[] = [
   },
 ]
 
-type Usuario = { nome: string | null; email: string }
+type Usuario = { nome: string | null; email: string; unidade?: UnidadeFarmacia | null }
 
 function iniciais({ nome, email }: Usuario) {
   const base = nome ?? email.split('@')[0] ?? ''
@@ -156,6 +157,9 @@ export function Sidebar({ usuario }: { usuario: Usuario }) {
                 {usuario.email}
               </p>
             )}
+            <p className="truncate text-[11.5px] text-ardosia" title="Unidade deste login: define o código de produto que aparece">
+              {usuario.unidade ? `Unidade ${nomeUnidade(usuario.unidade)}` : 'Sem unidade definida'}
+            </p>
           </div>
           <form action={logout}>
             <button type="submit" className="btn btn-fantasma btn-icone btn-sm" title="Sair" aria-label="Sair">

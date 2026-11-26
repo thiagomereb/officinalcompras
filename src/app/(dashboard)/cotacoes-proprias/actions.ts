@@ -8,7 +8,14 @@ import { mensagemErroBanco, type Falha } from '@/lib/acoes'
 import { incluidoAMao } from '@/lib/pedidos'
 import { chaveDescricao } from '@/lib/orcamento'
 import { ehUnidadeQuantidade, normalizarUnidade } from '@/lib/unidades'
-import { chaveUnidade, nomeCurtoUnidade } from '@/lib/unidades-farmacia'
+import {
+  codigoNaUnidade,
+  comCodigo,
+  colunaCodigo,
+  nomeUnidade,
+  unidadeDaCotacao,
+  type UnidadeFarmacia,
+} from '@/lib/unidades-farmacia'
 import type { ItemCotacaoPropria } from '@/lib/cotacao-propria'
 import type { Json } from '@/types/database'
 
@@ -109,38 +116,34 @@ async function insumoDoProduto(
     insumoId,
     nomeNovo,
     unidade,
-  }: { codigo: string; unidadeCotacao: string; insumoId: string | null; nomeNovo: string | null; unidade: string },
+  }: { codigo: string; unidadeCotacao: UnidadeFarmacia | null; insumoId: string | null; nomeNovo: string | null; unidade: string },
 ): Promise<{ id: string; nome: string; criado: boolean; semCodigo: boolean } | Falha> {
-  const unidadeNome = nomeCurtoUnidade(unidadeCotacao)
-  const { data: porCodigo, error } = await supabase
-    .from('insumo_codigos')
-    .select('insumos(id, nome_padrao)')
-    .eq('unidade', chaveUnidade(unidadeCotacao))
-    .eq('codigo', codigo)
-    .maybeSingle()
-  if (error) return { erro: error.message }
-  const doCodigo = porCodigo?.insumos as { id: string; nome_padrao: string } | null | undefined
-  if (doCodigo) {
-    if (insumoId && doCodigo.id !== insumoId) {
-      return { erro: `Na unidade ${unidadeNome}, o código ${codigo} é de outro insumo do cadastro: ${doCodigo.nome_padrao}.` }
+  const unidadeNome = nomeUnidade(unidadeCotacao)
+  if (unidadeCotacao) {
+    const { data: doCodigo, error } = await supabase
+      .from('insumos')
+      .select('id, nome_padrao')
+      .eq(colunaCodigo(unidadeCotacao), codigo)
+      .maybeSingle()
+    if (error) return { erro: error.message }
+    if (doCodigo) {
+      if (insumoId && doCodigo.id !== insumoId) {
+        return { erro: `Em ${unidadeNome}, o código ${codigo} é de outro insumo do cadastro: ${doCodigo.nome_padrao}.` }
+      }
+      return { id: doCodigo.id, nome: doCodigo.nome_padrao, criado: false, semCodigo: false }
     }
-    return { id: doCodigo.id, nome: doCodigo.nome_padrao, criado: false, semCodigo: false }
   }
 
   if (insumoId) {
-    const [{ data: escolhido }, { data: outroCodigo }] = await Promise.all([
-      supabase.from('insumos').select('id, nome_padrao').eq('id', insumoId).maybeSingle(),
-      supabase
-        .from('insumo_codigos')
-        .select('codigo')
-        .eq('insumo_id', insumoId)
-        .eq('unidade', chaveUnidade(unidadeCotacao))
-        .limit(1)
-        .maybeSingle(),
-    ])
+    const { data: escolhido } = await supabase
+      .from('insumos')
+      .select('id, nome_padrao, codigo_goiania, codigo_rio_verde')
+      .eq('id', insumoId)
+      .maybeSingle()
     if (!escolhido) return { erro: 'Insumo não encontrado no cadastro.' }
+    const outroCodigo = codigoNaUnidade(escolhido, unidadeCotacao)
     if (outroCodigo) {
-      return { erro: `Na unidade ${unidadeNome}, ${escolhido.nome_padrao} tem o código ${outroCodigo.codigo}, não ${codigo}.` }
+      return { erro: `Em ${unidadeNome}, ${escolhido.nome_padrao} tem o código ${outroCodigo}, não ${codigo}.` }
     }
     return { id: escolhido.id, nome: escolhido.nome_padrao, criado: false, semCodigo: true }
   }
@@ -228,7 +231,7 @@ export async function incluirProdutoNaCotacao(payload: unknown): Promise<Falha |
   if (fechado) return { erro: MAPA_FECHADO }
   if (mesmoCodigo) return { erro: `O código ${codigo} já está nesta cotação: ${mesmoCodigo.nome}.` }
 
-  const unidadeCotacao = cotacao.unidade ?? ''
+  const unidadeCotacao = unidadeDaCotacao(cotacao.unidade)
   const insumo = await insumoDoProduto(supabase, { codigo, unidadeCotacao, insumoId, nomeNovo, unidade })
   if ('erro' in insumo) return insumo
 
@@ -271,10 +274,14 @@ export async function incluirProdutoNaCotacao(payload: unknown): Promise<Falha |
 
   // O insumo passa a ter o código nesta unidade, como na importação
   if (insumo.semCodigo) {
-    const { error: erroCodigo } = await supabase
-      .from('insumo_codigos')
-      .insert({ unidade: chaveUnidade(unidadeCotacao), codigo, insumo_id: insumo.id })
-    if (erroCodigo) console.warn(`[cotacao-propria] não foi possível gravar o código ${codigo} do insumo: ${erroCodigo.message}`)
+    if (unidadeCotacao) {
+      const { error: erroCodigo } = await supabase
+        .from('insumos')
+        .update(comCodigo(unidadeCotacao, codigo))
+        .eq('id', insumo.id)
+        .is(colunaCodigo(unidadeCotacao), null)
+      if (erroCodigo) console.warn(`[cotacao-propria] não foi possível gravar o código ${codigo} do insumo: ${erroCodigo.message}`)
+    }
   }
 
   const ofertas = await ligarOfertasPorSinonimo(supabase, cotacaoPropriaId, item.id, insumo.id)
@@ -324,16 +331,12 @@ export async function editarProdutoDaCotacao(payload: unknown): Promise<Falha | 
   if (!insumo) return { erro: 'Insumo não encontrado no cadastro.' }
 
   // O código, nesta unidade, não pode ser de outro insumo
-  const chave = chaveUnidade(cotacao.unidade)
-  const { data: dono } = await supabase
-    .from('insumo_codigos')
-    .select('insumo_id, insumos(nome_padrao)')
-    .eq('unidade', chave)
-    .eq('codigo', codigo)
-    .maybeSingle()
-  if (dono && dono.insumo_id !== insumo.id) {
-    const nome = (dono.insumos as { nome_padrao: string } | null)?.nome_padrao ?? 'outro insumo'
-    return { erro: `Na unidade ${nomeCurtoUnidade(cotacao.unidade)}, o código ${codigo} é de ${nome}. Corrija na página desse insumo.` }
+  const unidadeCotacao = unidadeDaCotacao(cotacao.unidade)
+  const { data: dono } = unidadeCotacao
+    ? await supabase.from('insumos').select('id, nome_padrao').eq(colunaCodigo(unidadeCotacao), codigo).maybeSingle()
+    : { data: null }
+  if (dono && dono.id !== insumo.id) {
+    return { erro: `Em ${nomeUnidade(unidadeCotacao)}, o código ${codigo} é de ${dono.nome_padrao}. Corrija na página desse insumo.` }
   }
 
   const trocouInsumo = linha.insumo_id !== insumo.id
@@ -372,8 +375,13 @@ export async function editarProdutoDaCotacao(payload: unknown): Promise<Falha | 
     .eq('id', itemId)
   if (error) return { erro: error.message }
 
-  if (!dono) {
-    const { error: erroCodigo } = await supabase.from('insumo_codigos').insert({ unidade: chave, codigo, insumo_id: insumo.id })
+  // O insumo que ainda não tem código nesta unidade fica com o da linha
+  if (!dono && unidadeCotacao) {
+    const { error: erroCodigo } = await supabase
+      .from('insumos')
+      .update(comCodigo(unidadeCotacao, codigo))
+      .eq('id', insumo.id)
+      .is(colunaCodigo(unidadeCotacao), null)
     if (erroCodigo) console.warn(`[cotacao-propria] não foi possível gravar o código ${codigo} do insumo: ${erroCodigo.message}`)
   }
 

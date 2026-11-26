@@ -4,57 +4,38 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { mensagemErroBanco, type Falha } from '@/lib/acoes'
-import { chaveUnidade, nomeCurtoUnidade } from '@/lib/unidades-farmacia'
+import { colunaCodigo, comCodigo, ehUnidadeFarmacia, nomeUnidade, unidadeDaCotacao } from '@/lib/unidades-farmacia'
 
 const MSG_DUPLICADO = 'Já existe um insumo com este nome.'
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
-// Troca, inclui ou tira (codigoNovo null) o código do insumo numa unidade da
+// Põe, troca ou tira (codigoNovo null) o código do insumo numa unidade da
 // farmácia. As linhas incluídas à mão deste insumo em cotações dessa unidade
 // ainda abertas passam a usar o código novo; as que vieram no PDF ficam como o
 // relatório trouxe.
 export async function alterarCodigoInsumo(
   insumoId: string,
   unidade: string,
-  codigoAntigo: string | null,
   codigoNovo: string | null,
 ): Promise<Falha | { linhas: number }> {
-  const chave = chaveUnidade(unidade)
   const novo = codigoNovo?.trim() || null
-  if (!UUID.test(insumoId) || !chave || chave.length > 200) return { erro: 'Insumo ou unidade inválida.' }
+  if (!UUID.test(insumoId) || !ehUnidadeFarmacia(unidade)) return { erro: 'Insumo ou unidade inválida.' }
   if (novo && !/^\d{1,15}$/.test(novo)) return { erro: 'O código tem só números (até 15).' }
-  if (!novo && !codigoAntigo) return { erro: 'Informe o código.' }
-  if (novo && novo === codigoAntigo) return { linhas: 0 }
 
   const supabase = await createClient()
-  const nomeUnidade = nomeCurtoUnidade(chave)
+  const coluna = colunaCodigo(unidade)
 
   if (novo) {
-    const { data: dono, error } = await supabase
-      .from('insumo_codigos')
-      .select('insumo_id, insumos(nome_padrao)')
-      .eq('unidade', chave)
-      .eq('codigo', novo)
-      .maybeSingle()
+    const { data: dono, error } = await supabase.from('insumos').select('id, nome_padrao').eq(coluna, novo).maybeSingle()
     if (error) return { erro: error.message }
-    if (dono && dono.insumo_id !== insumoId) {
-      const nome = (dono.insumos as { nome_padrao: string } | null)?.nome_padrao ?? 'outro insumo'
-      return { erro: `Na unidade ${nomeUnidade}, o código ${novo} já é de ${nome}. Tire de lá antes.` }
+    if (dono && dono.id !== insumoId) {
+      return { erro: `Em ${nomeUnidade(unidade)}, o código ${novo} já é de ${dono.nome_padrao}. Tire de lá antes.` }
     }
   }
 
-  if (codigoAntigo) {
-    const { error } = await supabase
-      .from('insumo_codigos')
-      .delete()
-      .eq('unidade', chave)
-      .eq('codigo', codigoAntigo)
-      .eq('insumo_id', insumoId)
-    if (error) return { erro: error.message }
-  }
-  if (novo) {
-    const { error } = await supabase.from('insumo_codigos').upsert({ unidade: chave, codigo: novo, insumo_id: insumoId })
-    if (error) return { erro: error.message }
+  const { error: erroCodigo } = await supabase.from('insumos').update(comCodigo(unidade, novo)).eq('id', insumoId)
+  if (erroCodigo) {
+    return { erro: mensagemErroBanco(erroCodigo, { duplicado: `Em ${nomeUnidade(unidade)}, o código ${novo} já é de outro insumo.` }) }
   }
 
   // Linhas incluídas à mão (horário diferente do da importação) deste insumo,
@@ -66,7 +47,7 @@ export async function alterarCodigoInsumo(
       .select('id, unidade, created_at, mapas_cotacao(status)')
     const abertas = (cotacoes ?? []).filter(
       (c) =>
-        chaveUnidade(c.unidade) === chave &&
+        unidadeDaCotacao(c.unidade) === unidade &&
         !(c.mapas_cotacao as { status: string }[] | null)?.some((m) => m.status === 'aprovado' || m.status === 'exportado'),
     )
     for (const c of abertas) {

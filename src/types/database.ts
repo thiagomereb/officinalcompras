@@ -393,35 +393,6 @@ export type Database = {
         }
         Relationships: []
       }
-      insumo_codigos: {
-        Row: {
-          codigo: string
-          created_at: string
-          insumo_id: string
-          unidade: string
-        }
-        Insert: {
-          codigo: string
-          created_at?: string
-          insumo_id: string
-          unidade: string
-        }
-        Update: {
-          codigo?: string
-          created_at?: string
-          insumo_id?: string
-          unidade?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "insumo_codigos_insumo_id_fkey"
-            columns: ["insumo_id"]
-            isOneToOne: false
-            referencedRelation: "insumos"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       insumo_sinonimos: {
         Row: {
           created_at: string | null
@@ -454,6 +425,8 @@ export type Database = {
       insumos: {
         Row: {
           codigo: string | null
+          codigo_goiania: string | null
+          codigo_rio_verde: string | null
           created_at: string | null
           descricao: string | null
           id: string
@@ -463,6 +436,8 @@ export type Database = {
         }
         Insert: {
           codigo?: string | null
+          codigo_goiania?: string | null
+          codigo_rio_verde?: string | null
           created_at?: string | null
           descricao?: string | null
           id?: string
@@ -472,6 +447,8 @@ export type Database = {
         }
         Update: {
           codigo?: string | null
+          codigo_goiania?: string | null
+          codigo_rio_verde?: string | null
           created_at?: string | null
           descricao?: string | null
           id?: string
@@ -664,6 +641,27 @@ export type Database = {
         }
         Relationships: []
       }
+      usuarios_unidade: {
+        Row: {
+          email: string | null
+          unidade: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          email?: string | null
+          unidade?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          email?: string | null
+          unidade?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       historico_compras: {
@@ -715,7 +713,7 @@ export type Database = {
     }
     Functions: {
       aprender_sinonimos: { Args: { p_pares: Json }; Returns: number }
-      chave_unidade: { Args: { p: string }; Returns: string }
+      unidade_farmacia: { Args: { p: string }; Returns: string }
       aprovar_mapa: {
         Args: {
           p_comparacao: Json

@@ -8,7 +8,7 @@ import { createClient } from '@/lib/supabase/client'
 import type { InsumoOpcao } from '@/lib/supabase/busca-insumos'
 import { UNIDADES_QUANTIDADE, ehUnidadeQuantidade, normalizarUnidade, type UnidadeQuantidade } from '@/lib/unidades'
 import { numeroDigitado } from '@/lib/numero'
-import { chaveUnidade, nomeCurtoUnidade } from '@/lib/unidades-farmacia'
+import { codigoNaUnidade, nomeUnidade, unidadeDaCotacao } from '@/lib/unidades-farmacia'
 import type { Falha } from '@/lib/acoes'
 
 type Incluido = { codigo: string; nome: string; ofertas: number }
@@ -62,19 +62,20 @@ export function IncluirProduto({ cotacaoPropriaId, unidadeCotacao, incluir, bloq
   async function escolher(i: InsumoOpcao) {
     setInsumo(i)
     setErro(null)
-    const chave = chaveUnidade(unidadeCotacao)
-    let doCadastro = i.codigos.find((c) => c.unidade === chave)?.codigo ?? null
+    const unidadeFarmacia = unidadeDaCotacao(unidadeCotacao)
+    let codigos = i.codigos
     let unidadePadrao = i.unidade_padrao
-    // A busca por semelhança não traz o código nem a unidade
-    if (!i.codigos.length) {
-      const supabase = createClient()
-      const [{ data: cod }, { data: ins }] = await Promise.all([
-        supabase.from('insumo_codigos').select('codigo').eq('insumo_id', i.id).eq('unidade', chave).maybeSingle(),
-        supabase.from('insumos').select('unidade_padrao').eq('id', i.id).maybeSingle(),
-      ])
-      doCadastro = cod?.codigo ?? null
-      unidadePadrao = ins?.unidade_padrao ?? unidadePadrao
+    // A busca por semelhança não traz os códigos nem a unidade
+    if (!codigos) {
+      const { data } = await createClient()
+        .from('insumos')
+        .select('unidade_padrao, codigo_goiania, codigo_rio_verde')
+        .eq('id', i.id)
+        .maybeSingle()
+      codigos = data ? { codigo_goiania: data.codigo_goiania, codigo_rio_verde: data.codigo_rio_verde } : null
+      unidadePadrao = data?.unidade_padrao ?? unidadePadrao
     }
+    const doCadastro = codigos ? codigoNaUnidade(codigos, unidadeFarmacia) : null
     setCodigo(doCadastro ?? '')
     setCodigoDoCadastro(!!doCadastro)
     const u = normalizarUnidade(unidadePadrao)
@@ -225,7 +226,7 @@ export function IncluirProduto({ cotacaoPropriaId, unidadeCotacao, incluir, bloq
           <div className="grid grid-cols-[1fr_110px] gap-3">
             <div>
               <label htmlFor={`${idForm}-codigo`} className="legenda">
-                Código na unidade {nomeCurtoUnidade(unidadeCotacao)} <span className="obrigatorio">*</span>
+                Código em {nomeUnidade(unidadeDaCotacao(unidadeCotacao))} <span className="obrigatorio">*</span>
               </label>
               <input
                 id={`${idForm}-codigo`}

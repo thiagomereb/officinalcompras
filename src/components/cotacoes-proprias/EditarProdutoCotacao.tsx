@@ -6,7 +6,7 @@ import { Modal } from '@/components/ui/Modal'
 import { BuscaInsumo } from '@/components/ui/BuscaInsumo'
 import type { InsumoOpcao } from '@/lib/supabase/busca-insumos'
 import { UNIDADES_QUANTIDADE, ehUnidadeQuantidade, normalizarUnidade, type UnidadeQuantidade } from '@/lib/unidades'
-import { chaveUnidade, nomeCurtoUnidade } from '@/lib/unidades-farmacia'
+import { codigoNaUnidade, nomeUnidade, unidadeDaCotacao } from '@/lib/unidades-farmacia'
 import { numeroDigitado } from '@/lib/numero'
 import type { Falha } from '@/lib/acoes'
 
@@ -56,7 +56,7 @@ export function EditarProdutoCotacao({ cotacaoPropriaId, unidadeCotacao, produto
     setTrocando(false)
     setErro(null)
     // O código do insumo novo nesta unidade, se o cadastro tiver
-    const doCadastro = i.codigos.find((c) => c.unidade === chaveUnidade(unidadeCotacao))?.codigo
+    const doCadastro = i.codigos ? codigoNaUnidade(i.codigos, unidadeDaCotacao(unidadeCotacao)) : null
     if (doCadastro) setCodigo(doCadastro)
   }
 
@@ -149,7 +149,7 @@ export function EditarProdutoCotacao({ cotacaoPropriaId, unidadeCotacao, produto
         <div className="grid grid-cols-[1fr_110px] gap-3">
           <div>
             <label htmlFor={`${idForm}-codigo`} className="legenda">
-              Código na unidade {nomeCurtoUnidade(unidadeCotacao)} <span className="obrigatorio">*</span>
+              Código em {nomeUnidade(unidadeDaCotacao(unidadeCotacao))} <span className="obrigatorio">*</span>
             </label>
             <input
               id={`${idForm}-codigo`}

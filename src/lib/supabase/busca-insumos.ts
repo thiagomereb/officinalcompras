@@ -1,33 +1,27 @@
 import { createClient } from './client'
-
-export type CodigoUnidade = { unidade: string; codigo: string }
+import type { CodigosInsumo } from '@/lib/unidades-farmacia'
 
 export type InsumoOpcao = {
   id: string
   nome_padrao: string
   unidade_padrao: string | null
   // Código do produto no sistema da farmácia em cada unidade (o mesmo número
-  // pode ser outro produto na outra unidade); vazio quando o insumo veio só
-  // pela busca por semelhança, que não traz os códigos
-  codigos: CodigoUnidade[]
+  // pode ser outro produto na outra unidade); null quando o insumo veio só pela
+  // busca por semelhança, que não traz os códigos
+  codigos: CodigosInsumo | null
   // Preenchido quando o insumo foi achado por um sinônimo, para mostrar o porquê
   via_sinonimo: string | null
 }
 
 const LIMITE = 12
-const CAMPOS = 'id, nome_padrao, unidade_padrao, insumo_codigos(unidade, codigo)'
+const CAMPOS = 'id, nome_padrao, unidade_padrao, codigo_goiania, codigo_rio_verde'
 
-type InsumoComCodigos = {
-  id: string
-  nome_padrao: string
-  unidade_padrao: string | null
-  insumo_codigos: CodigoUnidade[] | null
-}
+type InsumoComCodigos = { id: string; nome_padrao: string; unidade_padrao: string | null } & CodigosInsumo
 const opcao = (i: InsumoComCodigos, via_sinonimo: string | null): InsumoOpcao => ({
   id: i.id,
   nome_padrao: i.nome_padrao,
   unidade_padrao: i.unidade_padrao,
-  codigos: i.insumo_codigos ?? [],
+  codigos: { codigo_goiania: i.codigo_goiania, codigo_rio_verde: i.codigo_rio_verde },
   via_sinonimo,
 })
 
@@ -43,7 +37,12 @@ export async function buscarInsumos(termo: string): Promise<InsumoOpcao[]> {
   const [porCodigo, porNome, porSinonimo, parecidos] = await Promise.all([
     // Só números: pode ser o código do sistema da farmácia (de qualquer unidade)
     /^\d+$/.test(t)
-      ? supabase.from('insumo_codigos').select(`insumos(${CAMPOS})`).like('codigo', `${t}%`).order('codigo').limit(LIMITE)
+      ? supabase
+          .from('insumos')
+          .select(CAMPOS)
+          .or(`codigo_goiania.like.${t}%,codigo_rio_verde.like.${t}%`)
+          .order('nome_padrao')
+          .limit(LIMITE)
       : Promise.resolve({ data: null, error: null }),
     supabase
       .from('insumos')
@@ -66,11 +65,7 @@ export async function buscarInsumos(termo: string): Promise<InsumoOpcao[]> {
   if (porNome.error) throw new Error(porNome.error.message)
 
   const encontrados = new Map<string, InsumoOpcao>()
-  for (const c of porCodigo.data ?? []) {
-    const i = c.insumos as InsumoComCodigos | null
-    if (i && !encontrados.has(i.id)) encontrados.set(i.id, opcao(i, null))
-  }
-  for (const i of (porNome.data ?? []) as InsumoComCodigos[]) {
+  for (const i of [...((porCodigo.data ?? []) as InsumoComCodigos[]), ...((porNome.data ?? []) as InsumoComCodigos[])]) {
     if (!encontrados.has(i.id)) encontrados.set(i.id, opcao(i, null))
   }
   for (const s of porSinonimo.data ?? []) {
@@ -83,7 +78,7 @@ export async function buscarInsumos(termo: string): Promise<InsumoOpcao[]> {
         id: p.insumo_id,
         nome_padrao: p.nome_padrao,
         unidade_padrao: null,
-        codigos: [],
+        codigos: null,
         via_sinonimo: null,
       })
     }
