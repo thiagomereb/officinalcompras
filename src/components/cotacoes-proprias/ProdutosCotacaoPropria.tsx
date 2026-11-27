@@ -4,6 +4,7 @@ import { useMemo, useState, useTransition } from 'react'
 import Link from 'next/link'
 import { Check, Pencil, Search, Trash2 } from 'lucide-react'
 import { EditarProdutoCotacao, type EditarProduto } from './EditarProdutoCotacao'
+import { QuantidadeEditavel } from './QuantidadeEditavel'
 import { LeituraPreco } from '@/components/ui/LeituraPreco'
 import { melhorDoFornecedor, resumirProduto, type OfertaProduto, type ResumoProduto } from '@/lib/ofertas-cotacao'
 import type { Falha } from '@/lib/acoes'
@@ -39,6 +40,8 @@ interface Props {
   remover?: Remover
   // Corrige um produto do pedido; ausente quando a cotação não muda mais
   editar?: EditarProduto
+  // Muda só a quantidade pedida; ausente quando a cotação não muda mais
+  alterarQuantidade?: (itemId: string, cotacaoPropriaId: string, quantidade: number, unidade: string) => Promise<Falha | void>
   // A unidade da farmácia da cotação (o código do produto é o desta unidade)
   unidadeCotacao?: string | null
 }
@@ -102,6 +105,7 @@ export function ProdutosCotacaoPropria({
   incluir,
   remover,
   editar,
+  alterarQuantidade,
   unidadeCotacao = null,
 }: Props) {
   const [editando, setEditando] = useState<ProdutoPedido | null>(null)
@@ -279,8 +283,13 @@ export function ProdutosCotacaoPropria({
                         />
                       </td>
                       <td className="num leitura text-ardosia">{p.teor != null ? `${quantidadeBR(p.teor)}%` : '—'}</td>
-                      <td className="num leitura">
-                        {quantidadeBR(p.quantidade)} {p.unidade}
+                      <td className="num">
+                        <QuantidadeEditavel
+                          quantidade={p.quantidade}
+                          unidade={p.unidade}
+                          rotulo={p.nome}
+                          gravar={alterarQuantidade ? (q, u) => alterarQuantidade(p.id, cotacaoPropriaId, q, u) : undefined}
+                        />
                       </td>
                       <td className="num">{r.menor ? <LeituraPreco valor={r.menor.precoBase} base={r.menor.base} /> : '—'}</td>
                       <td className="max-w-[260px] truncate text-[12.5px]" title={nomesMenor.join(', ')}>
@@ -330,8 +339,13 @@ export function ProdutosCotacaoPropria({
                       </Link>
                     )}
                   </td>
-                  <td className="num leitura">
-                    {quantidadeBR(p.quantidade)} {p.unidade}
+                  <td className="num">
+                    <QuantidadeEditavel
+                      quantidade={p.quantidade}
+                      unidade={p.unidade}
+                      rotulo={p.nome}
+                      gravar={alterarQuantidade ? (q, u) => alterarQuantidade(p.id, cotacaoPropriaId, q, u) : undefined}
+                    />
                   </td>
                   <td className="text-ardosia">
                     {melhor.embalagens && melhor.embalagens !== 1 ? `${quantidadeBR(melhor.embalagens)}× ` : ''}

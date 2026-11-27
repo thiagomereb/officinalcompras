@@ -16,7 +16,13 @@ import { AdicionarOrcamento } from '@/components/cotacoes-proprias/AdicionarOrca
 import { IncluirProduto } from '@/components/cotacoes-proprias/IncluirProduto'
 import { incluidoAMao } from '@/lib/pedidos'
 import { ExcluirCotacaoPropriaButton } from './ExcluirCotacaoPropriaButton'
-import { editarProdutoDaCotacao, excluirCotacaoPropria, incluirProdutoNaCotacao, removerProdutoIncluido } from '../actions'
+import {
+  alterarQuantidadePedida,
+  editarProdutoDaCotacao,
+  excluirCotacaoPropria,
+  incluirProdutoNaCotacao,
+  removerProdutoIncluido,
+} from '../actions'
 import { dadosParaNovoOrcamento, salvarOrcamento } from '../orcamentos-actions'
 
 const moeda = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
@@ -270,6 +276,7 @@ export default async function CotacaoPropriaPage({
         }
         remover={fechada ? undefined : removerProdutoIncluido}
         editar={fechada ? undefined : editarProdutoDaCotacao}
+        alterarQuantidade={fechada ? undefined : alterarQuantidadePedida}
         unidadeCotacao={cotacao.unidade}
       />
     </div>

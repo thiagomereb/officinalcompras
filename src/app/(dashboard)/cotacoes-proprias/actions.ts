@@ -391,6 +391,35 @@ export async function editarProdutoDaCotacao(payload: unknown): Promise<Falha | 
   return { nome: manual ? insumo.nome_padrao : linha.nome }
 }
 
+// Muda só a quantidade pedida de um produto (e a unidade dela). O mapa em
+// rascunho começa a compra por essa quantidade onde o comprador ainda não
+// digitou outra. Com mapa aprovado, a cotação não muda mais.
+export async function alterarQuantidadePedida(
+  itemId: string,
+  cotacaoPropriaId: string,
+  quantidade: number,
+  unidade: string,
+): Promise<Falha | void> {
+  if (!UUID.test(itemId) || !UUID.test(cotacaoPropriaId)) return { erro: 'Produto inválido.' }
+  if (!(Number.isFinite(quantidade) && quantidade > 0 && quantidade < 1e9)) return { erro: 'Informe uma quantidade maior que zero.' }
+  const u = normalizarUnidade(unidade)
+  if (!ehUnidadeQuantidade(u)) return { erro: 'Unidade inválida.' }
+
+  const supabase = await createClient()
+  if (await temMapaFechado(supabase, cotacaoPropriaId)) return { erro: MAPA_FECHADO }
+  const { data, error } = await supabase
+    .from('cotacao_propria_itens')
+    .update({ quantidade: Math.round(quantidade * 10000) / 10000, unidade: u })
+    .eq('id', itemId)
+    .eq('cotacao_propria_id', cotacaoPropriaId)
+    .select('id')
+  if (error) return { erro: error.message }
+  if (!data?.length) return { erro: 'Produto não encontrado nesta cotação.' }
+
+  revalidatePath(`/cotacoes-proprias/${cotacaoPropriaId}`, 'layout')
+  revalidatePath('/mapas', 'layout')
+}
+
 // Desfaz uma inclusão à mão. Os produtos que vieram no PDF ficam: são o pedido
 // do sistema da farmácia
 export async function removerProdutoIncluido(itemId: string, cotacaoPropriaId: string): Promise<Falha | void> {
